@@ -130,6 +130,7 @@ code before it can obtain a submittable envelope.
 | `internal/xdrcopy`   | Deep copy by XDR round-trip                                                                                                                                                                                                                                             |
 | `cmd/soroauth`       | CLI: `payload`, `sign`, `delegates`, `inspect`, `doctor`, `cross-compile`. `inspect`, `payload` and `sign` take a whole envelope as well as a single entry, and work out which they were handed                                                                         |
 | `remote/`            | The HTTP signing protocol: `Request`/`Response`, a reference `Server`, and a client `Signer` that satisfies `soroauth.Signer`. Transmits the preimage, not just the digest; the server recomputes the digest and refuses a mismatch. The root module does not import it |
+| `server/`            | The HTTP verification service: `POST /verify` with the CLI's verdicts and JSON shape, plus `GET /healthz`. Stateless, holds no keys; served by `soroauth-server`, built with `make server`                                                                              |
 | `adapters/walletsdk` | A **separate Go module**: the wallet-SDK-shaped adapter. The root module does not import it, so no wallet SDK is a dependency of soroauth                                                                                                                               |
 
 ## Untrusted input

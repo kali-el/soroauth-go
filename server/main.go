@@ -1,4 +1,14 @@
-// Package server provides an HTTP verification service for Soroban authorization entries.
+// Command soroauth-server exposes soroauth's offline verification over HTTP,
+// for wallets and custody systems that want a pre-submission check without
+// embedding Go.
+//
+// It is stateless and holds no keys: verification rebuilds the signing payload
+// from the entry itself and checks the signatures against it, which needs
+// public data only. There is no field that accepts a secret, nothing is
+// stored, and request bodies are never logged. Rate limiting, authentication
+// and TLS are the operator's concern — put this behind a reverse proxy that
+// provides them — and the documentation states that rather than inventing a
+// scheme here.
 package main
 
 import (
@@ -14,46 +24,44 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/soroauth/soroauth-go"
+	"github.com/stellar/go-stellar-sdk/network"
 	"github.com/stellar/go-stellar-sdk/xdr"
+
+	"github.com/soroauth/soroauth-go"
 )
 
 // Version is set at build time via -ldflags.
 var Version = "dev"
 
+// maxRequestBodySize bounds the JSON request body. An authorization entry
+// carries a small invocation tree; the library refuses decoded entries past
+// soroauth.MaxDecodeInputBytes, and the base64 form of such an entry plus its
+// JSON framing fits comfortably under this cap.
 const maxRequestBodySize = 1 << 20 // 1 MB
 
-// verifyRequest is the JSON request body for the /verify endpoint.
+// verifyRequest is the JSON request body for POST /verify.
 type verifyRequest struct {
-	// Entry is the base64-encoded SorobanAuthorizationEntry or TransactionEnvelope.
+	// Entry is the base64 authorization entry or transaction envelope.
 	Entry string `json:"entry"`
-	// Network is the network passphrase or shorthand (testnet, futurenet, public).
+	// Network is testnet, futurenet, public, or a literal network passphrase.
 	Network string `json:"network"`
-	// ValidUntilLedger is an optional assertion of the expiration the entry carries.
-	// If provided and it disagrees with the entry's stored expiration, the response
-	// will include an error.
+	// ValidUntilLedger is an optional assertion of the expiration the entry
+	// carries. The payload is always rebuilt from the entry's own stored
+	// expiration; a disagreement is an error, never an override.
 	ValidUntilLedger uint32 `json:"valid_until_ledger,omitempty"`
-	// AllowUnsigned allows unsigned nodes (e.g., a Void top-level node in a delegates entry).
-	AllowUnsigned bool `json:"allow_unsigned,omitempty"`
 }
 
-// verifyResponse is the JSON response for the /verify endpoint.
-type verifyResponse struct {
-	// Reports is the verification report(s). For a single entry it is one object;
-	// for an envelope it is an array with operation_index and entry_index.
-	Reports interface{} `json:"reports,omitempty"`
-	// Error is set when the request is malformed or verification cannot proceed.
-	Error string `json:"error,omitempty"`
-}
-
-// nodeOutput represents one credential node's verdict in the JSON report.
+// nodeOutput is one credential node's verdict in the JSON report. Its shape is
+// deliberately identical to the CLI's verify output, so a client parses one
+// schema for both.
 type nodeOutput struct {
 	Address string `json:"address"`
 	Verdict string `json:"verdict"`
 	Reason  string `json:"reason,omitempty"`
 }
 
-// entryOutput represents one entry's verification report in the JSON output.
+// entryOutput is one entry's verification report in the JSON output,
+// identical to the CLI's verify output.
 type entryOutput struct {
 	OperationIndex   int          `json:"operation_index,omitempty"`
 	EntryIndex       int          `json:"entry_index,omitempty"`
@@ -64,6 +72,11 @@ type entryOutput struct {
 	Verified         bool         `json:"verified"`
 	Nodes            []nodeOutput `json:"nodes"`
 	Note             string       `json:"note,omitempty"`
+}
+
+// errorOutput is the failure body. It matches the CLI's --json error object.
+type errorOutput struct {
+	Error string `json:"error"`
 }
 
 func main() {
@@ -77,13 +90,9 @@ func main() {
 	writeTimeout := getEnvDuration("WRITE_TIMEOUT", 10*time.Second)
 	idleTimeout := getEnvDuration("IDLE_TIMEOUT", 120*time.Second)
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/healthz", healthzHandler)
-	mux.HandleFunc("/verify", verifyHandler)
-
 	srv := &http.Server{
 		Addr:         addr,
-		Handler:      mux,
+		Handler:      newMux(),
 		ReadTimeout:  readTimeout,
 		WriteTimeout: writeTimeout,
 		IdleTimeout:  idleTimeout,
@@ -108,9 +117,18 @@ func main() {
 	log.Println("server stopped")
 }
 
+// newMux wires the routes. It is a constructor rather than inline in main so
+// the integration tests serve the exact same routes over httptest.
+func newMux() *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", healthzHandler)
+	mux.HandleFunc("/verify", verifyHandler)
+	return mux
+}
+
 func healthzHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -120,17 +138,36 @@ func healthzHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// verifyHandler answers one question about each entry it is handed: do the
+// signatures already on it verify over the payload it commits to?
+//
+// The verdicts are the CLI's: verified, unsigned, invalid, cannot_check, one
+// per credential node, in the CLI's JSON shape — a single object for one
+// entry, an array carrying operation_index and entry_index for an envelope.
+// A verification that completes is HTTP 200 whatever the verdicts say: the
+// verdicts are the answer, and a body that says "invalid" is not a transport
+// failure. That maps to the CLI's exit code 4, which likewise fires after the
+// report is printed. Only a request the service cannot verify — malformed
+// JSON, a missing field, an undecodable entry, an engine error, or a
+// valid_until_ledger assertion the entry contradicts — is 4xx with an
+// {"error"} body and no report.
 func verifyHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
-	// Limit request body size
 	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
-
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
+		// An oversize body is reported as 413 rather than 400: the request
+		// was well-formed but too large, so retrying it unchanged can never
+		// succeed and the caller should know why at a glance.
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			writeError(w, http.StatusRequestEntityTooLarge, "request body exceeds the 1 MB limit")
+			return
+		}
 		writeError(w, http.StatusBadRequest, "reading request body: "+err.Error())
 		return
 	}
@@ -140,101 +177,79 @@ func verifyHandler(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "parsing JSON: "+err.Error())
 		return
 	}
-
 	if req.Entry == "" {
 		writeError(w, http.StatusBadRequest, "entry is required")
 		return
 	}
-	if req.Network == "" {
-		writeError(w, http.StatusBadRequest, "network is required (testnet, futurenet, public, or a literal passphrase)")
-		return
-	}
-
-	// Resolve network passphrase
-	passphrase := resolveNetwork(req.Network)
-
-	// Decode the entry or envelope
-	entry, envelope, isEnvelope, err := decodeEntryOrEnvelope(req.Entry)
+	passphrase, err := resolveNetwork(req.Network)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "decoding entry: "+err.Error())
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	var reports []entryOutput
-	var verifyErr error
+	input, err := decodeEntryOrEnvelope(req.Entry)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 
-	if isEnvelope {
-		entries, err := soroauth.EnvelopeEntries(envelope)
+	type located struct {
+		entry          xdr.SorobanAuthorizationEntry
+		operationIndex int
+		entryIndex     int
+	}
+	var locatedEntries []located
+	if input.isEnvelope {
+		entries, err := soroauth.EnvelopeEntries(input.envelope)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "envelope has no authorization entries: "+err.Error())
 			return
 		}
 		for _, e := range entries {
-			report, err := soroauth.VerifyEntry(e.Entry, passphrase)
-			if err != nil {
-				verifyErr = err
-				break
-			}
-			if req.ValidUntilLedger != 0 && report.ValidUntilLedger != req.ValidUntilLedger {
-				verifyErr = fmt.Errorf("entry carries expiration %d, but valid_until_ledger says %d", report.ValidUntilLedger, req.ValidUntilLedger)
-				break
-			}
-			reports = append(reports, newEntryOutput(report, e.OperationIndex+1, e.EntryIndex+1))
+			locatedEntries = append(locatedEntries, located{entry: e.Entry, operationIndex: e.OperationIndex, entryIndex: e.EntryIndex})
 		}
 	} else {
-		report, err := soroauth.VerifyEntry(entry, passphrase)
+		locatedEntries = append(locatedEntries, located{entry: input.entry})
+	}
+
+	outputs := make([]entryOutput, 0, len(locatedEntries))
+	for _, item := range locatedEntries {
+		report, err := soroauth.VerifyEntry(item.entry, passphrase)
 		if err != nil {
-			verifyErr = err
-		} else {
-			if req.ValidUntilLedger != 0 && report.ValidUntilLedger != req.ValidUntilLedger {
-				verifyErr = fmt.Errorf("entry carries expiration %d, but valid_until_ledger says %d", report.ValidUntilLedger, req.ValidUntilLedger)
-			}
-			reports = append(reports, newEntryOutput(report, 0, 0))
+			writeError(w, http.StatusBadRequest, "verification failed: "+err.Error())
+			return
 		}
-	}
-
-	if verifyErr != nil {
-		writeError(w, http.StatusBadRequest, "verification failed: "+verifyErr.Error())
-		return
-	}
-
-	// Determine if any node failed verification
-	failed := false
-	for _, report := range reports {
-		for _, node := range report.Nodes {
-			switch node.Verdict {
-			case string(soroauth.VerdictVerified):
-			case string(soroauth.VerdictUnsigned):
-				if !req.AllowUnsigned {
-					failed = true
-				}
-			default:
-				failed = true
-			}
+		if req.ValidUntilLedger != 0 && report.ValidUntilLedger != req.ValidUntilLedger {
+			writeError(w, http.StatusBadRequest,
+				fmt.Sprintf("entry carries expiration %d, but valid_until_ledger says %d",
+					report.ValidUntilLedger, req.ValidUntilLedger))
+			return
 		}
-	}
-
-	response := verifyResponse{
-		Reports: reports,
-	}
-	if failed {
-		response.Error = "one or more credential nodes did not verify"
+		out := newEntryOutput(report)
+		if input.isEnvelope {
+			out.OperationIndex = item.operationIndex + 1
+			out.EntryIndex = item.entryIndex + 1
+		}
+		outputs = append(outputs, out)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	if failed {
-		w.WriteHeader(http.StatusUnprocessableEntity)
+	enc := json.NewEncoder(w)
+	enc.SetEscapeHTML(false)
+	if input.isEnvelope {
+		_ = enc.Encode(outputs)
+	} else {
+		_ = enc.Encode(outputs[0])
 	}
-	_ = json.NewEncoder(w).Encode(response)
 }
 
 func writeError(w http.ResponseWriter, status int, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(verifyResponse{Error: msg})
+	_ = json.NewEncoder(w).Encode(errorOutput{Error: msg})
 }
 
-func newEntryOutput(report soroauth.VerificationReport, opIndex, entryIndex int) entryOutput {
+func newEntryOutput(report soroauth.VerificationReport) entryOutput {
 	out := entryOutput{
 		CredentialType:   report.CredentialType,
 		AddressBound:     report.AddressBound,
@@ -243,10 +258,6 @@ func newEntryOutput(report soroauth.VerificationReport, opIndex, entryIndex int)
 		Verified:         report.Verified(),
 		Note:             report.Note,
 		Nodes:            make([]nodeOutput, 0, len(report.Nodes)),
-	}
-	if opIndex > 0 {
-		out.OperationIndex = opIndex
-		out.EntryIndex = entryIndex
 	}
 	for _, node := range report.Nodes {
 		out.Nodes = append(out.Nodes, nodeOutput{
@@ -258,38 +269,61 @@ func newEntryOutput(report soroauth.VerificationReport, opIndex, entryIndex int)
 	return out
 }
 
-func resolveNetwork(value string) string {
+// resolveNetwork turns the network field into a passphrase. The three named
+// networks are shorthands resolved from the SDK's constants — the same source
+// the CLI uses, so the two cannot drift; anything else is a literal
+// passphrase, so a standalone network works without this service knowing
+// about it.
+func resolveNetwork(value string) (string, error) {
 	switch value {
+	case "":
+		return "", errors.New("network is required (testnet, futurenet, public, or a literal passphrase)")
 	case "testnet":
-		return "Test SDF Network ; September 2015"
+		return network.TestNetworkPassphrase, nil
 	case "futurenet":
-		return "Test SDF Future Network ; October 2022"
+		return network.FutureNetworkPassphrase, nil
 	case "public":
-		return "Public Global Stellar Network ; September 2015"
+		return network.PublicNetworkPassphrase, nil
 	default:
-		return value
+		return value, nil
 	}
 }
 
-// decodeEntryOrEnvelope parses the base64 input as either an entry or envelope.
-func decodeEntryOrEnvelope(value string) (xdr.SorobanAuthorizationEntry, xdr.TransactionEnvelope, bool, error) {
-	// Try as envelope first
+// decodedInput is a base64 blob that was either an authorization entry or a
+// transaction envelope, together with which of the two it turned out to be.
+type decodedInput struct {
+	entry      xdr.SorobanAuthorizationEntry
+	envelope   xdr.TransactionEnvelope
+	isEnvelope bool
+}
+
+// decodeEntryOrEnvelope reads the entry field, which accepts either shape.
+//
+// Both are base64 XDR unions whose first bytes can overlap, so a blob is
+// tried against both and judged on what it decodes to: an envelope only wins
+// when it decodes and carries entries to authorize, which an authorization
+// entry never looks like. Anything else that fails both readings gets the
+// entry error, since the field has always meant an entry first. This mirrors
+// the CLI's --entry handling, which is what keeps the verdicts identical.
+func decodeEntryOrEnvelope(value string) (decodedInput, error) {
 	var envelope xdr.TransactionEnvelope
-	if err := xdr.SafeUnmarshalBase64(value, &envelope); err == nil {
-		entries, err := soroauth.EnvelopeEntries(envelope)
-		if err == nil && len(entries) > 0 {
-			// It's an envelope with entries
-			return xdr.SorobanAuthorizationEntry{}, envelope, true, nil
+	envelopeErr := xdr.SafeUnmarshalBase64(value, &envelope)
+
+	var entry xdr.SorobanAuthorizationEntry
+	entryErr := xdr.SafeUnmarshalBase64(value, &entry)
+
+	if envelopeErr == nil {
+		if entries, err := soroauth.EnvelopeEntries(envelope); err == nil && len(entries) > 0 {
+			return decodedInput{envelope: envelope, isEnvelope: true}, nil
+		} else if entryErr != nil {
+			return decodedInput{}, fmt.Errorf("decoding entry as an envelope: %w", err)
 		}
 	}
 
-	// Try as entry
-	var entry xdr.SorobanAuthorizationEntry
-	if err := xdr.SafeUnmarshalBase64(value, &entry); err != nil {
-		return xdr.SorobanAuthorizationEntry{}, xdr.TransactionEnvelope{}, false, err
+	if entryErr != nil {
+		return decodedInput{}, fmt.Errorf("decoding entry: %w", entryErr)
 	}
-
-	return entry, xdr.TransactionEnvelope{}, false, nil
+	return decodedInput{entry: entry}, nil
 }
 
 func getEnv(key, fallback string) string {

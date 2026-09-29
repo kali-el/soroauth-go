@@ -61,6 +61,9 @@ subcommands
 subinvocation
 subinvocations
 testnet
+futurenet
+healthz
+httptest
 tx
 txnbuild
 uint32
@@ -243,6 +246,11 @@ mutate
 mutates
 mutation
 mutations
+reproducer
+reproducers
+GOCACHE
+subtest
+subtests
 input
 inputs
 output

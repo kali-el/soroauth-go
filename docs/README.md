@@ -17,15 +17,16 @@ the architecture note and the guides is the one they need. The repository root
 
 ## Guides
 
-| Document                                      | Answers                                                                                                            |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| [labels](labels.md)                           | What each complexity and area label means, who applies it, and who has the final say on complexity.                |
-| [signers](signers.md)                         | Which signer to use for a given threat model, and what evidence backs each one.                                    |
-| [passkeys](passkeys.md)                       | How to sign for a WebAuthn / passkey smart wallet, end to end.                                                     |
-| [migrating](migrating.md)                     | How to replace hand-rolled auth-entry signing with soroauth and verify it produced identical bytes.                |
-| [multi-party-signing](multi-party-signing.md) | How three parties sign one delegate tree in sequence, and why the expiration cannot change once anyone has signed. |
-| [verification-limits](verification-limits.md) | What `soroauth verify` can and cannot establish offline.                                                           |
-| [sdk-support](sdk-support.md)                 | Which `go-stellar-sdk` versions are supported and how the pin moves.                                               |
+| Document                                        | Answers                                                                                                            |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| [labels](labels.md)                             | What each complexity and area label means, who applies it, and who has the final say on complexity.                |
+| [signers](signers.md)                           | Which signer to use for a given threat model, and what evidence backs each one.                                    |
+| [passkeys](passkeys.md)                         | How to sign for a WebAuthn / passkey smart wallet, end to end.                                                     |
+| [migrating](migrating.md)                       | How to replace hand-rolled auth-entry signing with soroauth and verify it produced identical bytes.                |
+| [multi-party-signing](multi-party-signing.md)   | How three parties sign one delegate tree in sequence, and why the expiration cannot change once anyone has signed. |
+| [verification-limits](verification-limits.md)   | What `soroauth verify` can and cannot establish offline.                                                           |
+| [verification-service](verification-service.md) | How to run the HTTP verification service, and what it will and will not do.                                        |
+| [sdk-support](sdk-support.md)                   | Which `go-stellar-sdk` versions are supported and how the pin moves.                                               |
 
 ## Reference
 
@@ -38,14 +39,15 @@ the architecture note and the guides is the one they need. The repository root
 
 ## Testing and evidence
 
-| Document                                                             | Answers                                                                             |
-| -------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| [e2e/README](../e2e/README.md)                                       | What each live testnet scenario proves, and how the two-pass simulation flow works. |
-| [e2e/RESULTS](../e2e/RESULTS.md)                                     | The transaction hashes and observed credential arms from a real testnet run.        |
-| [differential fuzzing](../testdata/differential/README.md)           | How random entries are checked across the Go, JS and Python implementations.        |
-| [frozen divergences](../testdata/differential/regressions/README.md) | The regression corpus of cases the implementations once disagreed on.               |
-| [Python parity](../testdata/parity-python/README.md)                 | How the vectors are recomputed with the Python `stellar-sdk`.                       |
-| [Rust parity](../testdata/parity-rust/README.md)                     | How the vectors are recomputed with the `stellar-xdr` crate the host itself uses.   |
+| Document                                                             | Answers                                                                                     |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| [e2e/README](../e2e/README.md)                                       | What each live testnet scenario proves, and how the two-pass simulation flow works.         |
+| [e2e/RESULTS](../e2e/RESULTS.md)                                     | The transaction hashes and observed credential arms from a real testnet run.                |
+| [fuzzing](fuzzing.md)                                                | How the fuzz targets run continuously, and how a crash becomes a committed regression seed. |
+| [differential fuzzing](../testdata/differential/README.md)           | How random entries are checked across the Go, JS and Python implementations.                |
+| [frozen divergences](../testdata/differential/regressions/README.md) | The regression corpus of cases the implementations once disagreed on.                       |
+| [Python parity](../testdata/parity-python/README.md)                 | How the vectors are recomputed with the Python `stellar-sdk`.                               |
+| [Rust parity](../testdata/parity-rust/README.md)                     | How the vectors are recomputed with the `stellar-xdr` crate the host itself uses.           |
 
 ## Sub-project docs
 

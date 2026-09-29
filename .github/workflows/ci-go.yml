@@ -118,6 +118,12 @@ jobs:
         run: go test -run='^$' -fuzz=FuzzValidateDelegateOrder -fuzztime=30s .
       - name: fuzz Inspect
         run: go test -run='^$' -fuzz=FuzzInspect -fuzztime=30s .
+      - name: fuzz Preimage
+        run: go test -run='^$' -fuzz=FuzzPreimage -fuzztime=30s .
+      - name: fuzz Payload
+        run: go test -run='^$' -fuzz=FuzzPayload -fuzztime=30s .
+      - name: fuzz DecodeAuthorizationEntry
+        run: go test -run='^$' -fuzz=FuzzDecodeAuthorizationEntry -fuzztime=30s .
       # The xdrcopy round-trip target: a copy must be byte-identical to its
       # source and share no memory with it. It lives in its own package, so it
       # needs its own invocation.

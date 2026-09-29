@@ -56,6 +56,10 @@ entry_index for an envelope; a usage or decode error is a JSON object with an
 "error" field on stdout, as in the other subcommands.
 
 Nothing is signed and no key is involved.
+
+What a green result does and does not guarantee — custom accounts, expiration,
+nonce consumption — is stated in docs/verification-limits.md in the source
+repository.
 `
 
 // verifyNodeOutput is one credential node's verdict in the JSON report.

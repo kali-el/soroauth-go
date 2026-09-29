@@ -565,74 +565,27 @@ executed in CI. If it passes locally but the full property test fails, the
 failure is in the extended search space — increase `MinSuccessfulTests` in the
 deterministic test to narrow it down.
 
-### Fuzzing ValidateDelegateOrder
-
-`FuzzValidateDelegateOrder` in `delegates_test.go` feeds arbitrary bytes to the
-XDR decoder and, for anything that decodes to an entry, asserts that
-`ValidateDelegateOrder` neither panics nor accepts a delegate array that is
-mis-ordered or carries a duplicate at one level. Its seed corpus is built from a
-golden vector, a hand-built well-formed tree, and that tree with one delegate
-address overwritten to duplicate its sibling.
-
-The seeds are constructed with `f` passed to the test helpers, which take
-`testing.TB`. Do not build a `&testing.T{}` literal to satisfy them: it is an
-uninitialised struct, so `Helper()` and `Fatalf()` on it panic instead of
-reporting, and a seed that failed to build would take the whole target down
-rather than failing it.
-
-The fuzz run itself is not a pull-request check — 30 seconds of fuzzing per push
-would slow every review for a target whose job is to find inputs over time. It
-runs on push to `main` and on demand, as the `fuzz` job in
-`.github/workflows/ci-go.yml`. What a pull request does exercise is the seed
-corpus, through the ordinary `go test ./...`.
-
-To run it locally:
-
-````sh
-go test -run='^$' -fuzz=FuzzValidateDelegateOrder -fuzztime=30s .
-
 ### Fuzzing
 
-The library includes fuzz tests for `Inspect` (`FuzzInspect` in `inspect_test.go`) to ensure arbitrary byte sequences never panic and always return either a valid `EntryInfo` or an error, never a half-populated struct alongside an error.
+The full story lives in [docs/fuzzing.md](docs/fuzzing.md): the six targets and
+the property each asserts, the nightly `continuous-fuzz` workflow that runs them
+beyond CI's time budget, and the crash-to-regression-seed process. What follows
+is what you need while working.
 
-#### Running fuzz tests locally
-
-```sh
-go test -run=^$ -fuzz=FuzzInspect -fuzztime=30s .
-````
-
-If a fuzz test fails, Go writes the failing input corpus item to a subdirectory
-under `testdata/fuzz/`. To reproduce or debug a captured failure:
+The short loop:
 
 ```sh
-go test -run=FuzzInspect/testdata/fuzz/FuzzInspect/<seed-name> .
+make fuzz               # every target, 30s each (override: make fuzz FUZZTIME=2m)
+go run ./cmd/gencorpus  # regenerate the seed corpus from the golden vectors
 ```
 
-### The fuzz seed corpus
-
-`FuzzValidateDelegateOrder`'s seed corpus is generated from the golden vectors,
-which are the entries this library is proven against: every credential arm, a
-sub-invocation tree, a create-contract invocation, the int64 nonce edges, and
-three delegate shapes including one address at two nesting depths. Seeding from
-real entries means the fuzzer's mutations start inside the space of things that
-decode, rather than spending its budget discovering what a valid entry looks
-like.
-
-Regenerate it from the repository root:
-
-```sh
-go run ./cmd/gencorpus
-```
-
-The seeds land in `testdata/fuzz/FuzzValidateDelegateOrder/`. That path is not a
-choice: Go reads a target's seed corpus from `testdata/fuzz/<TargetName>` and
-nowhere else, and each file must be in Go's corpus format (a `go test fuzz v1`
-header, then one Go literal per fuzz argument) or it fails the package's tests
-instead of being skipped. `gencorpus` writes the decoded entry bytes, since the
-target's argument is the `[]byte` it passes to `UnmarshalBinary`.
-
-Every seed is run by the ordinary suite, as a named subtest — no `-fuzz` flag
-needed, so a seed that starts failing fails `go test ./...`:
+The seeds land in `testdata/fuzz/<TargetName>/`. That path is not a choice: Go
+reads a target's seed corpus from `testdata/fuzz/<TargetName>` and nowhere else,
+and each file must be in Go's corpus format (a `go test fuzz v1` header, then
+one Go literal per fuzz argument) or it fails the package's tests instead of
+being skipped. Every seed runs as a named subtest under the ordinary
+`go test ./...`, so a seed that starts failing fails the suite with no `-fuzz`
+flag needed:
 
 ```sh
 go test -run FuzzValidateDelegateOrder -v .
@@ -643,13 +596,22 @@ go test -run FuzzValidateDelegateOrder -v .
 --- PASS: FuzzValidateDelegateOrder (0.01s)
 ```
 
-The generator is deterministic, so CI regenerates the corpus and fails on drift,
-the same way it does for the vectors themselves. Do not hand-edit a seed: change
-the vectors or the generator and regenerate.
+Two rules about those files:
 
-For the fuzz _run_ — the part that searches for new inputs — see the `fuzz` job
-in `.github/workflows/ci-go.yml`, which runs on push to `main` and on demand
-rather than on pull requests.
+- **Never hand-edit a generated seed.** Change the vectors or the generator and
+  regenerate; CI regenerates and fails on drift. `gencorpus` tracks what it
+  generated in `testdata/fuzz/.gencorpus/` and deletes only those files, so a
+  committed crash reproducer sharing the directory survives regeneration.
+- **A crash reproducer is committed as the fuzzer wrote it**, together with the
+  fix, so it keeps running as a regression subtest. The one exception to the
+  no-hand-edit rule above, because it is evidence of a finding rather than a
+  generated artefact.
+
+When a target builds seeds with the test helpers, pass `f` straight through: the
+helpers take `testing.TB`, which `*testing.F` satisfies. Do not build a
+`&testing.T{}` literal to satisfy them: it is an uninitialised struct, so
+`Helper()` and `Fatalf()` on one panic instead of reporting, and a seed that
+failed to build would take the whole target down rather than failing it.
 
 ### Capturing regressions
 
@@ -730,7 +692,9 @@ and its body says what was wrong, how it was found, and what changed.
 ## Security
 
 Do not open a public issue for a signature-correctness or key-handling bug. See
-[SECURITY.md](SECURITY.md).
+[SECURITY.md](SECURITY.md). The security issue template redirects to private
+advisories rather than collecting a report — use it rather than a blank issue,
+and never paste vulnerability details into any public form.
 
 ## License
 

@@ -183,7 +183,9 @@ as `cannot_check` and never as `verified`. Whether the key that signed is
 actually a signer of the account, and whether enough signers signed to meet its
 threshold, are account-state questions this command cannot see and does not
 claim to answer. A green result is evidence that the signatures on the entry
-commit to it; it is not a promise the transaction will succeed.
+commit to it; it is not a promise the transaction will succeed. The full
+statement of what a green result does and does not guarantee is in
+[docs/verification-limits.md](docs/verification-limits.md).
 
 ### Doctor — check the local environment for common first-run problems
 

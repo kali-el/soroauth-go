@@ -9,7 +9,7 @@
 // entries means its mutations begin inside the space of things that decode,
 // instead of spending the budget discovering what a valid entry looks like.
 //
-// Two details about the output are not free choices:
+// Three details about the output are not free choices:
 //
 //   - The directory is testdata/fuzz/<TargetName>. Go reads a
 //     target's seed corpus from testdata/fuzz/<TargetName>, and only from
@@ -19,6 +19,12 @@
 //     followed by one Go literal per fuzz argument — not the raw bytes. A file
 //     in that directory that is not in this format fails the package's tests
 //     rather than being skipped.
+//   - Cleanup is manifest-tracked, not RemoveAll. A fuzzer that finds a crash
+//     writes the reproducer into testdata/fuzz/<TargetName>, and that file is
+//     committed as a regression seed — so gencorpus must never delete a file
+//     it did not write. Each target's generated filenames are recorded in
+//     testdata/fuzz/.gencorpus/<TargetName>, and only those files are removed
+//     before rewriting. Anything else in the seed directory is left alone.
 //
 // The seed is the decoded entry, not the base64 text, because the target's
 // argument is the []byte it hands to UnmarshalBinary.
@@ -39,11 +45,17 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 )
 
 const (
 	vectorsDir = "testdata/vectors"
 	fuzzDir    = "testdata/fuzz"
+	// manifestDir records, per fuzz target, the seed filenames gencorpus
+	// generated. It lives outside the seed directories because Go treats
+	// every file inside testdata/fuzz/<TargetName> as a seed: a manifest
+	// there would fail the package's tests instead of being skipped.
+	manifestDir = "testdata/fuzz/.gencorpus"
 )
 
 // vector is the part of a golden vector this reads: the entry before any
@@ -92,16 +104,21 @@ func run() error {
 	for _, target := range targets {
 		outDir := filepath.Join(fuzzDir, target)
 
-		// Removed and recreated, so a seed whose vector was deleted or renamed does
-		// not linger. A stale seed is not harmless: it is run by every `go test`.
-		if err := os.RemoveAll(outDir); err != nil {
-			return fmt.Errorf("clearing %s: %w", outDir, err)
-		}
 		if err := os.MkdirAll(outDir, 0o755); err != nil {
 			return fmt.Errorf("creating %s: %w", outDir, err)
 		}
+		// Remove only what the previous run generated — a stale seed whose
+		// vector was deleted or renamed. Anything else in the directory is
+		// a committed crash reproducer and is left alone.
+		generated := manifestNames(filepath.Join(manifestDir, target))
+		for _, name := range generated {
+			if err := os.Remove(filepath.Join(outDir, name)); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("clearing %s: %w", filepath.Join(outDir, name), err)
+			}
+		}
 
 		written := 0
+		var writtenNames []string
 		for _, name := range names {
 			path := filepath.Join(vectorsDir, name)
 			raw, err := os.ReadFile(path)
@@ -126,12 +143,17 @@ func run() error {
 				if err != nil {
 					return fmt.Errorf("decoding entry %d of %s: %w", i, path, err)
 				}
-				outPath := filepath.Join(outDir, fmt.Sprintf("%s_%d", stem, i))
+				seedName := fmt.Sprintf("%s_%d", stem, i)
+				outPath := filepath.Join(outDir, seedName)
 				if err := os.WriteFile(outPath, corpusFile(decoded), 0o644); err != nil {
 					return fmt.Errorf("writing %s: %w", outPath, err)
 				}
+				writtenNames = append(writtenNames, seedName)
 				written++
 			}
+		}
+		if err := writeManifest(target, writtenNames); err != nil {
+			return fmt.Errorf("writing the %s manifest: %w", target, err)
 		}
 
 		fmt.Printf("wrote %d seeds for %s into %s\n", written, target, outDir)
@@ -159,11 +181,14 @@ func writePayloadSeeds() error {
 	target := "FuzzPayload"
 	outDir := filepath.Join(fuzzDir, target)
 
-	if err := os.RemoveAll(outDir); err != nil {
-		return fmt.Errorf("clearing %s: %w", outDir, err)
-	}
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return fmt.Errorf("creating %s: %w", outDir, err)
+	}
+	generated := manifestNames(filepath.Join(manifestDir, target))
+	for _, name := range generated {
+		if err := os.Remove(filepath.Join(outDir, name)); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("clearing %s: %w", filepath.Join(outDir, name), err)
+		}
 	}
 
 	seeds := [][]byte{
@@ -173,13 +198,55 @@ func writePayloadSeeds() error {
 		{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
 	}
 
+	var writtenNames []string
 	for i, seed := range seeds {
-		outPath := filepath.Join(outDir, fmt.Sprintf("seed_%d", i))
+		seedName := fmt.Sprintf("seed_%d", i)
+		outPath := filepath.Join(outDir, seedName)
 		if err := os.WriteFile(outPath, corpusFile(seed), 0o644); err != nil {
 			return fmt.Errorf("writing %s: %w", outPath, err)
 		}
+		writtenNames = append(writtenNames, seedName)
+	}
+	if err := writeManifest(target, writtenNames); err != nil {
+		return fmt.Errorf("writing the %s manifest: %w", target, err)
 	}
 
 	fmt.Printf("wrote %d seeds for %s into %s\n", len(seeds), target, outDir)
+	return nil
+}
+
+// manifestNames reads the filenames a previous run recorded for a target.
+// A missing manifest is not an error: it means nothing was generated yet,
+// e.g. the first run after this tracking was added.
+func manifestNames(path string) []string {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var names []string
+	for _, line := range strings.Split(string(raw), "\n") {
+		if line != "" {
+			names = append(names, line)
+		}
+	}
+	return names
+}
+
+// writeManifest records the seed filenames a run generated, sorted so the
+// file is deterministic. The next run deletes exactly these files before
+// rewriting, which is what lets a stale seed disappear without touching a
+// committed crash reproducer sharing the directory.
+func writeManifest(target string, names []string) error {
+	sort.Strings(names)
+	if err := os.MkdirAll(manifestDir, 0o755); err != nil {
+		return fmt.Errorf("creating %s: %w", manifestDir, err)
+	}
+	body := ""
+	if len(names) > 0 {
+		body = strings.Join(names, "\n") + "\n"
+	}
+	if err := os.WriteFile(filepath.Join(manifestDir, target), []byte(body), 0o644); err != nil {
+		return fmt.Errorf("writing %s: %w", filepath.Join(manifestDir, target), err)
+	}
 	return nil
 }

@@ -5,33 +5,48 @@ body:
   - type: markdown
     attributes:
       value: |
-        **Do not describe the vulnerability here.**
+        **Do not describe the vulnerability here. Anything written in this form
+        becomes a public issue.**
 
-        This template exists only to redirect you to the private reporting channel.
-        Security issues must be reported through GitHub Security Advisories so they
-        stay confidential until a fix is available.
+        Security issues must be reported through GitHub Security Advisories so
+        they stay confidential until a fix is available.
 
         **[Open a private security advisory →](https://github.com/soroauth/soroauth-go/security/advisories/new)**
+
+        Please include what you can: the affected version or commit, what an
+        attacker achieves, and a reproduction — a failing test, an entry that
+        signs when it should not, or a payload that differs from the reference
+        implementation.
 
         ---
 
         ### What belongs in a private advisory
 
-        - A signature produced over the wrong payload (wrong preimage variant, wrong
-          network ID, wrong nonce, wrong expiration, or an address bound in that is
-          not the one the caller named).
-        - A signature written onto a credential node other than the intended target,
-          or onto a node whose address does not match.
+        - A signature produced over the wrong payload (wrong preimage variant,
+          wrong network ID, wrong nonce, wrong expiration, or an address bound
+          in that is not the one the caller named).
+        - A signature written onto a credential node other than the intended
+          target, or onto a node whose address does not match.
         - An entry accepted for signing that should have been refused — an
-          already-signed node silently overwritten, a delegates array accepted out
-          of order or with duplicates, an expiration that disagrees with signatures
-          already on the entry.
-        - Any way to make the library emit an entry whose stored expiration differs
-          from the expiration that was signed over.
+          already-signed node silently overwritten, a delegates array accepted
+          out of order or with duplicates, an expiration that disagrees with
+          signatures already on the entry.
+        - Any way to make the library emit an entry whose stored expiration
+          differs from the expiration that was signed over.
         - A secret reaching stdout, stderr, an error message, a log, or disk.
         - Divergence from the golden vectors that is not a bug in the vectors.
         - Panics reachable from untrusted input, or denial of service through
           malformed XDR.
+
+        Only the latest release receives fixes.
+
+        ### Out of scope — do not file these as advisories
+
+        - The fixture contracts in `e2e/contracts/` are test code, not a
+          product: findings about their missing admin functions, upgradability,
+          or policy engine are not vulnerabilities.
+        - Weaknesses in the Stellar protocol itself belong with the Stellar
+          Development Foundation, not here.
 
         ### What belongs in a public issue instead
 
@@ -42,3 +57,18 @@ body:
 
         See [SECURITY.md](https://github.com/soroauth/soroauth-go/blob/main/SECURITY.md)
         for the full policy, scope, and supported versions.
+
+  - type: checkboxes
+    id: no-details-shared
+    attributes:
+      label: Before submitting
+      description: >
+        This form creates a public issue. Vulnerabilities must stay
+        confidential until fixed, so nothing sensitive may be entered here.
+      options:
+        - label: >
+            I have not described the vulnerability in this form, and I
+            understand anything I write here is public. I will report the
+            details through a private security advisory instead.
+    validations:
+      required: true

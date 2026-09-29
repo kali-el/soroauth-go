@@ -210,3 +210,41 @@ func TestWithDelegatesRefusesAPathologicalTree(t *testing.T) {
 		t.Errorf("error %q does not match ErrDecodeLimit", err)
 	}
 }
+
+// FuzzDecodeAuthorizationEntry feeds arbitrary bytes through the bounded
+// decoder. Anything must either decode or fail with a clean error, never a
+// panic, and whatever the decoder consumed must re-encode identically without
+// growing: the XDR decoder reads a prefix of its input and ignores trailing
+// bytes, so a byte-identical round-trip holds only for the consumed prefix.
+// An input past the size bound must refuse with ErrDecodeLimit rather than
+// decoding at all.
+func FuzzDecodeAuthorizationEntry(f *testing.F) {
+	// f is passed to the helper directly, which takes testing.TB. A
+	// &testing.T{} literal would be an uninitialised struct: Helper() and
+	// Fatalf() on one panic rather than reporting, so a seed that failed to
+	// build would take the target down instead of failing it.
+	seed := entryForArm(f, xdr.SorobanCredentialsTypeSorobanCredentialsAddressV2, 42)
+	if raw, err := seed.MarshalBinary(); err == nil {
+		f.Add(raw)
+	}
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		encoded := base64.StdEncoding.EncodeToString(data)
+		entry, err := DecodeAuthorizationEntry(encoded)
+		if err != nil {
+			if len(data) > MaxDecodeInputBytes && !errors.Is(err, ErrDecodeLimit) {
+				t.Errorf("oversized input (%d bytes) refused without ErrDecodeLimit: %v", len(data), err)
+			}
+			return
+		}
+		roundTrip, err := entry.MarshalBinary()
+		if err != nil {
+			t.Fatalf("DecodeAuthorizationEntry returned an entry that does not re-encode: %v", err)
+		}
+		if len(roundTrip) > len(data) {
+			t.Errorf("re-encoding grew %d input bytes into %d", len(data), len(roundTrip))
+		} else if !bytes.Equal(roundTrip, data[:len(roundTrip)]) {
+			t.Errorf("re-encoding changed the %d consumed bytes of %d input bytes", len(roundTrip), len(data))
+		}
+	})
+}

@@ -486,3 +486,58 @@ func TestPayloadRejectsInvalidPreimage(t *testing.T) {
 		t.Errorf("Payload returned %x alongside an error, want the zero value", got)
 	}
 }
+
+// FuzzPreimage feeds arbitrary entry bytes through Preimage. Anything that
+// decodes must either produce a preimage or fail with a clean error, never a
+// panic, and a produced preimage must hash to a payload. Source-account entries
+// take the error path by design: they have no preimage to build.
+func FuzzPreimage(f *testing.F) {
+	// f is passed to the helper directly, which takes testing.TB. A
+	// &testing.T{} literal would be an uninitialised struct: Helper() and
+	// Fatalf() on one panic rather than reporting, so a seed that failed to
+	// build would take the target down instead of failing it.
+	seed := entryForArm(f, xdr.SorobanCredentialsTypeSorobanCredentialsAddressV2, 42)
+	if raw, err := seed.MarshalBinary(); err == nil {
+		f.Add(raw)
+	}
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		var entry xdr.SorobanAuthorizationEntry
+		if err := entry.UnmarshalBinary(data); err != nil {
+			return
+		}
+		preimage, err := Preimage(entry, testValidUntilLedger, network.TestNetworkPassphrase)
+		if err != nil {
+			return
+		}
+		if _, err := Payload(preimage); err != nil {
+			t.Errorf("Payload rejected a preimage Preimage built: %v", err)
+		}
+	})
+}
+
+// FuzzPayload feeds arbitrary bytes through the preimage hash. Anything that
+// decodes to a HashIdPreimage must either hash cleanly or fail with an error —
+// a discriminant with an empty arm cannot marshal — never a panic, and hashing
+// the same preimage twice must agree.
+func FuzzPayload(f *testing.F) {
+	f.Add([]byte{0})
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		var preimage xdr.HashIdPreimage
+		if err := preimage.UnmarshalBinary(data); err != nil {
+			return
+		}
+		first, err := Payload(preimage)
+		if err != nil {
+			return
+		}
+		second, err := Payload(preimage)
+		if err != nil {
+			t.Fatalf("Payload disagreed with itself: first call succeeded, second: %v", err)
+		}
+		if first != second {
+			t.Errorf("Payload is not deterministic:\nfirst  %x\nsecond %x", first, second)
+		}
+	})
+}

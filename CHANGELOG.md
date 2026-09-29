@@ -172,6 +172,63 @@ this project adheres to
 
 ### Added
 
+**HTTP verification service**
+
+- `server/` exposes `VerifyEntry` as `POST /verify` for wallets and custody
+  systems that want a pre-submission check without embedding Go. Verdicts and
+  JSON shapes are identical to `soroauth verify --json` (one object per entry,
+  an array with positions per envelope); a completed verification is HTTP 200
+  whatever the verdicts say, mapping the CLI's exit code 4. (#61)
+- The service is stateless and holds no keys: there is no field that accepts a
+  secret, nothing is stored, and request bodies are never logged. Rate limiting,
+  authentication and TLS are the operator's concern, stated in
+  `docs/verification-service.md` rather than invented here.
+- `server/main_test.go` serves the real routes over `httptest` and covers a
+  signed entry, a partially signed delegates tree, malformed requests, a
+  tampered expiration, a contradicted expiration assertion, and an envelope
+  input. `make server` builds `bin/soroauth-server` with the version stamped in;
+  the published container image stays CLI-only.
+
+**Security issue template**
+
+- The security issue template now carries the full scope itself: the advisory
+  link, what to include, what belongs in a public issue instead, the
+  out-of-scope cases, and the supported-versions note, all mirroring
+  `SECURITY.md`. A required acknowledgement checkbox blocks submission until the
+  reporter confirms nothing sensitive was entered, since the form itself still
+  creates a public issue. (#144)
+
+**Continuous fuzzing**
+
+- The `continuous-fuzz` workflow (`.github/workflows/fuzz.yml`) runs every fuzz
+  target nightly, on push to `main`, and on demand with a caller-chosen budget,
+  using the toolchain's own fuzzer rather than an external harness. Each target
+  gets 15 minutes per run with the fuzzer cache persisted across runs, and a
+  finding files (or comments on) one issue per target carrying the reproducer.
+  Nothing is auto-committed: the fix and its seed land through review, and
+  `make fuzz` runs the same targets locally. (#65)
+- Three new targets cover the paths the seed corpus already fed: `FuzzPreimage`
+  (anything decodable yields a preimage or a clean error), `FuzzPayload`
+  (hashing is deterministic), and `FuzzDecodeAuthorizationEntry` (the consumed
+  prefix re-encodes identically; oversize input is refused). The decode target's
+  first run found that the XDR decoder reads a prefix and ignores trailing bytes
+  — standard decoder behavior the property now states instead of forbidding —
+  and that input is committed as the `trailing_garbage_byte_0` regression seed.
+- `cmd/gencorpus` tracks what it generated in `testdata/fuzz/.gencorpus/` and
+  deletes only those files on regeneration, so a committed crash reproducer
+  sharing a seed directory survives the drift check instead of being wiped by
+  it. `docs/fuzzing.md` documents the targets, the nightly run, and the
+  crash-to-regression-seed process.
+
+**Verification limits documented**
+
+- `docs/verification-limits.md` states what a green `verify` result does and
+  does not guarantee: custom accounts, expiration bounds, and nonce consumption,
+  each with why offline code cannot decide it. `soroauth verify --help` and the
+  README's verify section both point at it, so the page is reachable from the
+  place that invites the belief a green result means the transaction will
+  succeed. (#64)
+
 **Offline verification**
 
 - `VerifyEntry` rebuilds the signing payload from an entry exactly as it stands

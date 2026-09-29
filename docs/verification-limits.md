@@ -15,8 +15,9 @@ present on an authorization entry. It answers one precise question:
   own fields: credentials arm, nonce, address (for V2 and delegates), invocation
   tree, and the `SignatureExpirationLedger` stored on the entry.
 - The entry has not been tampered with after signing: changing any field that
-  feeds the preimage (nonce, expiration, invocation, network) would cause the
-  payload to change and the verification to fail.
+  feeds the preimage (nonce, expiration, invocation — or the network it is
+  checked against) would cause the payload to change and the verification to
+  fail.
 - For the delegates arm, every delegate that signed is reported as verified. The
   top-level node is allowed to be unsigned (Void) when only delegates
   authenticate, per CAP-71-01; such a node is reported as `unsigned`, not
