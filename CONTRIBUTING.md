@@ -2,18 +2,120 @@
 
 ## Overview
 
-`soroauth` is a Go library for building, signing, and inspecting Soroban authorization entries. This document guides contributors through setup, vector regeneration, testing, and the release process.
+## Your first contribution, in ten steps
+
+The rest of this document is long because it carries the reasoning behind each
+rule. This checklist is the short path to a green pull request; each step links
+the section that explains it.
+
+- [ ] **1. Pick an issue and get assigned.** Comment on it and wait. Complexity
+      and area labels are what work is chosen from — see
+      [Picking up an issue](#picking-up-an-issue).
+- [ ] **2. Clone and run the suite before changing anything**, so you know a
+      later failure is yours: `git clone … && cd soroauth-go && go test ./...`.
+      Go 1.26.3 or later is the only requirement for the library and CLI — see
+      [Setup](#setup).
+- [ ] **3. Branch.** Name it after the work, not the issue number alone:
+      `docs/161-onboarding-checklist`, `feat/entry-diff`.
+- [ ] **4. Write the test first where you can.** A test that cannot fail reads
+      as evidence and is worse than none; if you expect a failure, assert
+      _which_ failure — see [What a change needs](#what-a-change-needs).
+- [ ] **5. Cite anything you claim about the protocol.** A doc comment, README
+      line or commit body that states host behaviour needs the CAP, the
+      `rs-soroban-env` file and function, or the SDK file and line. Not memory.
+- [ ] **6. Never hand-edit a golden vector.** If your change moves the bytes,
+      regenerate with `make vectors` and say in the commit body which CAP
+      requires the move — see [Golden vectors](#golden-vectors).
+- [ ] **7. Run `make`** — that is `fmt`, `vet` and `test`. If you touched any
+      Markdown, also run `npx prettier --write '**/*.md'`, because the build
+      checks it. `golangci-lint run ./...` is a local gate worth running too —
+      see [Before you open a pull request](#before-you-open-a-pull-request) and
+      [Linting](#linting).
+- [ ] **8. Commit in conventional form**, lowercase and imperative, one logical
+      unit per commit, with the command you ran and its real output in the body
+      — see [Commit format](#commit-format).
+- [ ] **9. Open the pull request** with one `Closes #<n>` line per issue it
+      resolves, what you changed, and how you verified it. A space-separated
+      list (`Closes #1 #2`) links only the first issue, and a closing line added
+      after the pull request is merged closes nothing, so write them before the
+      merge — otherwise an issue the work delivered stays open. Two checks gate
+      the merge: `vet and test` and `golden vectors are reproducible`.
+- [ ] **10. If the work turned out larger than its complexity label**, say so on
+      the issue rather than absorbing it silently.
+
+One thing that is not on the list: do not report a signature-correctness or
+key-handling bug in a public issue or pull request. See [Security](#security).
+
+## Picking up an issue
+
+Issues carry a complexity label and an area label, and those two are how work is
+chosen; complexity is also what an issue's Stellar Wave points are counted from.
+What each label means, who applies it, and who has the final say on complexity
+is documented in [docs/labels.md](docs/labels.md).
 
 ## Setup
 
-1. **Install Go**: Requires Go 1.25.0 or newer (the toolchain version in `go.mod`).
-2. **Install Node.js**: Required for generating golden vectors (`@stellar/stellar-sdk@17.1.0`).
-3. **Clone the repository**: `git clone https://github.com/soroauth/soroauth-go.git`
-4. **Install dependencies**: `go mod download`
-5. **Verify the environment**:
-   - `go version` should report Go 1.25.0+
-   - `node --version` should report Node.js current LTS
-   - `npm ls @stellar/stellar-sdk` should show `17.1.0` exactly
+```sh
+git clone https://github.com/soroauth/soroauth-go
+cd soroauth-go
+go test ./...
+```
+
+That is the whole setup for the library and CLI. Go 1.26.3 or later.
+
+The pinned `github.com/stellar/go-stellar-sdk` version and the policy for moving
+it live in [docs/sdk-support.md](docs/sdk-support.md).
+
+Two optional pieces need more:
+
+- **Regenerating golden vectors** needs Node (>= 22.12.0, what
+  `@stellar/stellar-sdk@17.1.0` declares).
+- **Running the e2e tests** needs Rust 1.93.0 (pinned in
+  `e2e/contracts/rust-toolchain.toml`, rustup will fetch it) and `stellar-cli`
+  28.0.0. See [the fixture contract quickstart](docs/fixture-quickstart.md) for
+  a step-by-step build and deploy guide from a clean checkout.
+- **Working on the wallet SDK adapter** (`adapters/walletsdk`) needs nothing
+  extra, but it is a module of its own with its own test loop; see
+  [The nested adapter module](#the-nested-adapter-module).
+- **Running the Python parity harness** needs Python 3.10+ and the pinned SDK in
+  `testdata/parity-python/requirements.txt`; `make parity` creates a venv and
+  installs it. The differential fuzzing harness reuses the same venv and SDK:
+  `make differential`.
+- **Working on the WebAssembly core or the TypeScript wrapper** needs Node (the
+  same 22+ the rest of the tooling uses). `make wasm-check` builds the module
+  and proves it byte-identical to the golden vectors; `make ts-test` typechecks
+  and tests the wrapper package.
+
+## Make targets
+
+The Makefile wraps the common tasks, so the commands below exist in one place
+rather than across several documents. Run `make help` for the list.
+
+| Target               | What it runs                                                                                          |
+| -------------------- | ----------------------------------------------------------------------------------------------------- |
+| `make` (default)     | `fmt`, `vet` and `test`                                                                               |
+| `make fmt`           | fails if `gofmt -l .` reports anything                                                                |
+| `make vet`           | `go vet ./...`                                                                                        |
+| `make test`          | `go test ./...`                                                                                       |
+| `make coverage`      | measures test coverage and enforces the per-package floors in `testdata/coverage/floors.json`         |
+| `make soak`          | runs the long-running batch signing soak (race detector on, `SOAKTIME`, default 2m)                   |
+| `make build`         | builds the CLI to `bin/soroauth`                                                                      |
+| `make vectors`       | `cd testdata/gen && npm ci && node gen.mjs && node gen-passkey.mjs`                                   |
+| `make vectors-check` | regenerates the vectors and fails if the committed files changed                                      |
+| `make demo-check`    | checks the browser demo's logic against the pinned SDK (`node examples/browser-passkey/app.test.mjs`) |
+| `make e2e`           | builds the test contract with `stellar-cli` and runs `go test -tags e2e -v ./e2e/...`                 |
+| `make parity`        | installs the pinned Python SDK into `.venv-parity` and runs the parity harness and its tests          |
+| `make parity-rust`   | runs the Rust stellar-xdr parity harness and its tests (needs Rust 1.93.0)                            |
+| `make differential`  | regenerates the differential fuzzing corpus and checks it with the Go, JS and Python implementations  |
+| `make wasm`          | builds the js/wasm signing core to `wasm/dist/`                                                       |
+| `make wasm-check`    | builds the wasm core and replays every golden vector through it                                       |
+| `make ts-test`       | typechecks and tests the `@soroauth/wasm` TypeScript package                                          |
+| `make clean`         | removes `bin/`, the wasm build output and the parity venv                                             |
+
+No target hides a failure. `make fmt` exits non-zero when a file needs
+formatting instead of printing a warning, `make vectors-check` exits non-zero
+when regeneration changes a committed vector, and `make e2e` refuses to run
+without `stellar-cli` rather than failing later with an obscure test error.
 
 ## Adding Recipes (Issue #408)
 
