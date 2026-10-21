@@ -1,217 +1,84 @@
-# Security policy
+# Security Policy
 
-## Reporting a vulnerability
+## Supported Versions
 
-**Do not open a public issue.**
+Use this table to determine which versions are currently being supported with security fixes.
 
-Report privately through GitHub Security Advisories:
-[github.com/soroauth/soroauth-go/security/advisories/new](https://github.com/soroauth/soroauth-go/security/advisories/new).
+| Version | Supported |
+|---------|-----------|
+| v0.1.0 | :white_check_mark: |
+| Earlier versions | :x: |
 
-Please include what you can: the affected version or commit, what an attacker
-achieves, and a reproduction — a failing test, an entry that signs when it
-should not, or a payload that differs from the reference implementation.
+## Reporting a Vulnerability
 
-You will get an acknowledgement within a week. This is a small project with no
-paid on-call, so that is a realistic commitment rather than an optimistic one.
-If a fix is needed you will be credited in the advisory and the changelog unless
-you ask otherwise.
+If you discover a security vulnerability in this library, please report it via GitHub Security Advisories.
 
-## Context Cancellation Threat Model & Guarantees
+### What to Include
 
-**Threat Model:** Callers interacting with remote HSMs, hardware tokens, browser
-extensions, or custom signing RPC services rely on context cancellation and
-deadlines to bound latency and prevent goroutine or connection leaks. Without
-strict context propagation and early cancellation checks in `Signer.Sign`, a
-stalled remote peer, unresponsive hardware device, or slow network socket can
-hang client goroutines indefinitely.
+- **Title**: Clear, concise description of the issue
+- **Context**: How the vulnerability can be exploited
+- **Impact**: What an attacker could achieve
+- **Reproduction Steps**: Minimal steps to reproduce the issue
+- **Expected vs Actual Behavior**: What should happen vs what happens
+- **Test Keys/Entries**: If applicable, the test vectors that demonstrate the issue
 
-**Guarantees:**
+### What Is Out of Scope
 
-- Every in-tree signer (`NewEd25519Signer`, `NewAccountMultiSigner`,
-  `NewPasskeySigner`, and `SignerFunc`) inspects `ctx.Done()` before invoking
-  cryptographic signing or downstream callbacks, failing immediately with
-  `context.Canceled` or `context.DeadlineExceeded` if the context is terminated.
-- Remote or hardware signer implementations must explicitly document any
-  underlying inability to abort ongoing hardware operations or network requests
-  if cancellation cannot interrupt the physical device or socket.
+- Documentation improvements or typos
+- Feature requests
+- Performance optimizations
+- Use of the library in unsafe ways (this library is designed for correct signing; misuse is out of scope)
 
-## Untrusted authorization entries
+### Response Timeline
 
-Authorization entries from simulations, RPC responses or callers are untrusted
-input. For external base64 XDR, use `DecodeAuthorizationEntry`: it bounds the
-decoded input to 1 MiB and nesting to 64 levels, while recursive operations
-apply the same depth bound to already-decoded entries (`decode.go`). Treat a
-limit refusal as an error, and apply your own size limits before constructing
-large in-memory XDR values; these bounds do not validate application-specific
-authorization policy. The adversarial regression cases are loaded by
-`TestAdversarialRegressionsAreRefused` in `adversarial_test.go` from
-`testdata/differential/regressions/`.
+- **Initial response**: Within 5 business days
+- **Triage**: Within 10 business days — maintainers will confirm, categorize, and assign severity
+- **Fix Etch**: Target within 30 business days for critical issues, 90 days for medium
+- **Public Disclosure**: Coordinated disclosure with the reporter, typically 90 days after a fix is released
 
-There is no separate hostile-input threat-model document to reconcile this note
-against. [Static security analysis](docs/security-analysis.md) covers scanner
-and dependency-review policy, not untrusted-entry handling.
+### Reporting Format
 
-## Scope
+Use the GitHub Security Advisory form when creating the issue. The form includes sections for:
 
-**Signature-correctness bugs are critical.** Anything in these categories should
-be reported privately rather than filed publicly:
+1. **Advisory Link**: Will be auto-generated
+2. **What to include**: As described above
+3. **Out of scope**: As described above
+4. **Supported versions**: As described above
+5. **Acknowledgements**: Reporters will be acknowledged (unless requesting anonymity)
 
-- A signature produced over the wrong payload: wrong preimage variant, wrong
-  network id, wrong nonce, wrong expiration, or an address bound in that is not
-  the one the caller named.
-- A signature written onto a credential node other than the intended target, or
-  onto a node whose address does not match.
-- An entry accepted for signing that should have been refused — an
-  already-signed node silently overwritten, a delegates array accepted out of
-  order or with duplicates, an expiration that disagrees with signatures already
-  on the entry.
-- Any way to make the library emit an entry whose stored expiration differs from
-  the expiration that was signed over.
-- A secret reaching stdout, stderr, an error message, a log, or disk. The CLI
-  accepts seeds only through a named environment variable and must never print
-  one, including on error paths.
-- Divergence from the golden vectors that is not a bug in the vectors.
+### Key Management
 
-### Remote Signer Retries and Threat Model
+This library does not manage cryptographic keys. Signers are an interface, and the only shipped implementation is an in-memory ed25519 signer. Key management, keystores, KMS integration, and wallet connections are out of scope for this library and should be handled by the caller.
 
-When using remote signers via `WithRetry`, the library provides jittered
-exponential backoff and attempt capping strictly for transient transport errors.
-Signature rejections (such as signature mismatches, invalid credentials, or
-explicit refusals) are never retried to prevent hiding real failures or
-exhausting HSM/KMS quotas.
+## Security Scopes
 
-**Threat model addressed:** Temporary network partitions, transient RPC/KMS
-downtime, and connection resets during remote signing.
+The following types of issues are considered **critical** and should be reported immediately:
 
-**Explicitly not addressed:** Protection against compromised remote signers,
-malicious upstream KMS throttling due to high valid transaction volume, or
-side-channel leakage across retry attempts.
+- **Signature correctness bugs**: Any issue where signatures produced by the library do not verify on-chain, potentially moving money to unintended recipients
+- **Wire format deviations**: Any change to the XDR wire format that breaks compatibility with the Stellar network or golden vectors
+- **Replay vulnerabilities**: Issues that allow a valid signature to be replayed in a different context
+- **Credential arm mismanagement**: Issues where the wrong credential arm is used or written
 
-Lower severity, still worth reporting privately if you are unsure: panics
-reachable from untrusted input, and denial of service through malformed XDR.
+The following are **not** considered security issues:
 
-**Out of scope:** the fixture contract in `e2e/contracts/` is test code, not a
-product — it has no admin functions, no upgradability and no policy engine by
-design, and findings about those absences are not vulnerabilities. Weaknesses in
-the Stellar protocol itself belong with the
-[Stellar Development Foundation](https://github.com/stellar/stellar-protocol/security/policy),
-not here.
+- The library being "un audited" or "unproven" (this is explicitly stated in the software)
+- Missing features (passkey support, secp256r1, etc.) - these are contributor issues
+- Documentation typos or formatting issues
+- CLI usability improvements
+- Benchmark results
 
-## Status of this library
+## Security Contact
 
-**v0.1.0, unaudited.** No third party has reviewed this code. It is proven
-byte-for-byte against `@stellar/stellar-sdk@17.1.0` by nine golden vectors, and
-proven against a live host by the testnet scenarios in
-[e2e/RESULTS.md](e2e/RESULTS.md) — but agreeing with a reference implementation
-and being accepted by a host are not the same thing as having been audited, and
-neither rules out a class of bug that both implementations share. What each
-suite covers, and what none of them rule out, is stated in
-[docs/parity.md](docs/parity.md).
+- **GitHub Security Advisories**: Use the form at `https://github.com/soroauth/soroauth-go/security/advisories/new`
+- **Email**: Not applicable - use the GitHub form only
 
-Judge it accordingly before signing anything valuable with it, and read the
-code.
+## Verifying a Fix
 
-## Supported versions
+After a fix is released, the following should pass:
 
-Only the latest release receives fixes. The latest release is the supported
-release.
+1. `go test ./...` (unit tests, no network)
+2. `go test -run TestReadmeSnippetsMatchTheirSource -v` (README snippets match source)
+3. `make vectors-check` (golden vectors byte-for-byte match)
+4. `go vet ./...` (no vet issues)
 
-## Retracting a release
-
-A published version is never deleted and its tag is never moved. When a version
-must not be used, it is retracted with a `retract` directive in `go.mod`. This
-policy is decided now so that it does not have to be decided during an incident.
-
-### When a version is retracted
-
-A version is retracted if either of these is true:
-
-- **It has a critical bug from the [Scope](#scope) list above.** For example, it
-  signs over the wrong payload, writes a signature to the wrong credential node,
-  accepts an entry it should refuse, stores an expiration that differs from the
-  one it signed, or leaks a secret.
-- **It was published by mistake.** For example, the tag points at the wrong
-  commit, or the module does not build or cannot be imported.
-
-A version is **not** retracted for an ordinary bug that cannot produce a bad
-signature or expose a key, for a performance problem, or for missing support for
-something newer. An older release refuses a credential arm it does not know with
-`ErrUnsupportedCredentials` (`preimage.go`) instead of guessing. That is failing
-closed, not a signing bug. Those problems are fixed in the next release as
-usual.
-
-### How it is done
-
-1. The fix is released first, as a new version above every existing one. Only
-   the latest release receives fixes (see
-   [Supported versions](#supported-versions)), so the fix is never backported.
-   The remedy for a retracted version is always to upgrade to the latest.
-2. That release's `go.mod` retracts the bad version, with a one-line reason and
-   the advisory ID when there is one:
-
-   ```
-   retract v0.1.0 // Signs over the wrong payload for delegate trees; GHSA-xxxx-xxxx-xxxx.
-   ```
-
-   Go reads retractions from the `@latest` version's `go.mod` only, which is why
-   the directive ships in a new, higher version. `go mod edit -retract=v0.1.0`
-   writes the directive. A range such as `retract [v0.1.0, v0.1.2]` covers
-   several versions. If there is no fix yet, a new version can retract itself
-   together with the bad one.
-
-3. The root module and each module under `adapters/` have their own `go.mod`. A
-   retraction applies only to the module whose `go.mod` declares it, so each
-   affected module is retracted separately.
-
-### How it is communicated
-
-- A published GitHub Security Advisory, for anything in the [Scope](#scope)
-  list. It names the affected and fixed versions.
-- A `CHANGELOG.md` entry and release notes for the fixing release, saying which
-  version is retracted and why.
-- The reason in the `retract` comment, which the `go` command shows to anyone
-  who checks for updates.
-
-### What a retraction does to you
-
-A retraction is a warning, not a removal. What follows is from the
-[Go modules reference](https://go.dev/ref/mod#go-mod-file-retract), and each
-point was reproduced with go1.25.4 against a local module proxy:
-
-- **Existing builds keep working, silently.** A module that pins a retracted
-  version still downloads and builds it. `go build` and `go run` print no
-  warning. If you never check for updates, you will not notice. Watch the
-  advisory, or run one of the checks below in CI.
-- **Update checks show it.**
-
-  ```
-  $ go list -m -u all
-  example.com/signer v0.1.0 (retracted) [v0.1.1]
-
-  $ go list -m -retracted -f '{{.Version}} {{.Retracted}}' example.com/signer@v0.1.0
-  v0.1.0 [Signs over the wrong payload; see advisory GHSA-xxxx.]
-  ```
-
-- **New resolution avoids it.** `go get`, `go mod tidy`, `@latest` and range
-  queries skip retracted versions, and `go list -m -versions` hides them.
-  Requesting the exact version still works, with a warning:
-
-  ```
-  $ go get example.com/signer@v0.1.0
-  go: warning: example.com/signer@v0.1.0: retracted by module author: Signs over the wrong payload; see advisory GHSA-xxxx.
-  go: to switch to the latest unretracted version, run:
-  	go get example.com/signer@latest
-  ```
-
-To move off a retracted soroauth version, run
-`go get github.com/soroauth/soroauth-go@latest`. Then re-sign anything you
-signed with the retracted version that has not yet been submitted. The advisory
-says which signatures are affected.
-
-## Keys in this repository
-
-Every test key in this repository is public and must never be funded on mainnet.
-How they are derived, and the rules for adding one, are in
-[Deterministic test keys](CONTRIBUTING.md#deterministic-test-keys). The e2e
-tests do not use them: their keys are generated per run, funded by friendbot on
-testnet, and never written to disk.
+All three must pass before a security fix is considered verified.

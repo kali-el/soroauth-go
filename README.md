@@ -1176,6 +1176,59 @@ http.Handle(remote.Path, server)
 
 signer := remote.NewSigner("http://127.0.0.1:8080", signerKey.Address())
 return soroauth.AuthorizeEntry(ctx, unsigned, signer, validUntil, network.TestNetworkPassphrase)
+``````go
+	signed, err := sorauth.AuthorizeEntry(ctx, entry, soroauth.NewEd25519Signer(signer), validUntil, passphrase)
+```
+```go
+	signed, err := sorauth.AuthorizeEntry(ctx, entry, soroauth.NewEd25519Signer(signer), validUntil, passphrase)
+```
+```go
+	wrapped, err := sorauth.WithDelegates(entry, validUntil,
+		[]soroauth.Delegate{
+			{Address: d1},
+			{Address: d2, Nested: []soroauth.Delegate{{Address: d3}}},
+		}, nil) // nil top-level signature → ScvVoid, which CAP-71-01 permits
+	if err != nil {
+		return xdr.SorobanAuthorizationEntry{}, err
+	}
+	for _, kp := range []*keypair.Full{k1, k2, k3} {
+		wrapped, err = sorauth.AuthorizeEntry(ctx, wrapped,
+			soroauth.NewEd25519Signer(kp), validUntil, passphrase,
+			soroauth.ForAddress(kp.Address()))
+		if err != nil {
+			return xdr.SorobanAuthorizationEntry{}, err
+		}
+	}
+```
+```go
+	result, err := sorauth.UpgradeToV2(entry)
+```
+```go
+	info, err := sorauth.Inspect(entry)
+```
+```go
+	preimage, err := sorauth.Preimage(entry, validUntilLedger, networkPassphrase)
+	if err != nil {
+		return xdr.HashIdPreimage__, [32]byte{}, err
+	}
+	payload, err := sorauth.Payload(preimage)
+	if err != nil {
+		return xdr.HashIdPreimage__, [32]byte{}, err
+	}
+```
+```go
+	signed, err := sorauth.AuthorizeAll(ctx, entries,
+		[]soroauth.Signer{soroauth.NewEd25519Signer(signer)},
+		validUntil, passphrase)
+```
+```go
+	err := sorauth.ValidateDelegateOrder(entry)
+```
+```go
+	result, err := sorauth.ExpirationAfter(latestLedger, ledgers)
+```
+```go
+	result, err := sorauth.WithDelegates(entry, validUntil, delegates, nil)
 ```
 
 It is a reference, not a service: it has no authentication, holds no key store,
