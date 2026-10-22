@@ -1173,7 +1173,7 @@ than blind-signing a hash. The server recomputes SHA-256 of the preimage and
 refuses a request whose payload does not match, and the client attaches its
 context to the request so cancelling it aborts an in-flight call.
 
-```go
+```````go
 server := remote.NewServer(soroauth.NewEd25519Signer(signerKey))
 server.Approver = remote.LogApprover(os.Stderr) // record what is approved
 http.Handle(remote.Path, server)
@@ -1182,10 +1182,12 @@ signer := remote.NewSigner("http://127.0.0.1:8080", signerKey.Address())
 return soroauth.AuthorizeEntry(ctx, unsigned, signer, validUntil, network.TestNetworkPassphrase)
 ``````go
 	signed, err := soroauth.AuthorizeEntry(ctx, entry, soroauth.NewEd25519Signer(signer), validUntil, passphrase)
-```
+```````
+
 ```go
 	signed, err := soroauth.AuthorizeEntry(ctx, entry, soroauth.NewEd25519Signer(signer), validUntil, passphrase)
 ```
+
 ```go
 	wrapped, err := soroauth.WithDelegates(entry, validUntil,
 		[]soroauth.Delegate{
@@ -1204,12 +1206,15 @@ return soroauth.AuthorizeEntry(ctx, unsigned, signer, validUntil, network.TestNe
 		}
 	}
 ```
+
 ```go
 	result, err := soroauth.UpgradeToV2(entry)
 ```
+
 ```go
 	info, err := soroauth.Inspect(entry)
 ```
+
 ```go
 	preimage, err := soroauth.Preimage(entry, validUntilLedger, networkPassphrase)
 	if err != nil {
@@ -1220,17 +1225,21 @@ return soroauth.AuthorizeEntry(ctx, unsigned, signer, validUntil, network.TestNe
 		return xdr.HashIdPreimage{}, [32]byte{}, err
 	}
 ```
+
 ```go
 	signed, err := soroauth.AuthorizeAll(ctx, entries,
 		[]soroauth.Signer{soroauth.NewEd25519Signer(signer)},
 		validUntil, passphrase)
 ```
+
 ```go
 	err := soroauth.ValidateDelegateOrder(entry)
 ```
+
 ```go
 	result, err := soroauth.ExpirationAfter(latestLedger, ledgers)
 ```
+
 ```go
 	result, err := soroauth.WithDelegates(entry, validUntil, delegates, nil)
 ```

@@ -1,191 +1,242 @@
 # Issue Backlog
 
-15-25 real issues for this repository, each with a title, context, acceptance criteria, and complexity.
+15-25 real issues for this repository, each with a title, context, acceptance
+criteria, and complexity.
 
 ---
 
 ## Trivial
 
 ### [ISSUE] Go doc examples for every exported function
-**Context**: Some exported functions lack Go doc examples. The test `TestGoDocExamples` (if it exists) or CI check verifies all exported functions have at least one doc example.
-**Acceptance Criteria**: Every exported function in the `soroauth` package has a Go doc comment with an example that compiles with `go doc -example`.
-**Complexity**: Trivial
+
+**Context**: Some exported functions lack Go doc examples. The test
+`TestGoDocExamples` (if it exists) or CI check verifies all exported functions
+have at least one doc example. **Acceptance Criteria**: Every exported function
+in the `soroauth` package has a Go doc comment with an example that compiles
+with `go doc -example`. **Complexity**: Trivial
 
 ### [ISSUE] Add missing error-type documentation
-**Context**: The typed address errors (`NoMatchingCredentialNodeError`, `DuplicateDelegateError`, `MissingSignerError`) were added but their Go doc examples need to be verified.
-**Acceptance Criteria**: Go doc examples for all three error types, showing `errors.Is` + `errors.As` recovery pattern, compile and pass `go test -run Example`.
-**Complexity**: Trivial
+
+**Context**: The typed address errors (`NoMatchingCredentialNodeError`,
+`DuplicateDelegateError`, `MissingSignerError`) were added but their Go doc
+examples need to be verified. **Acceptance Criteria**: Go doc examples for all
+three error types, showing `errors.Is` + `errors.As` recovery pattern, compile
+and pass `go test -run Example`. **Complexity**: Trivial
 
 ### [ISSUE] Update README badge in CONTRIBUTING
-**Context**: The contributing guide references a CI badge status that may need updating.
-**Acceptance Criteria**: The CONTRIBUTING.md references a passing CI badge format that matches the current repository.
-**Complexity**: Trivial
+
+**Context**: The contributing guide references a CI badge status that may need
+updating. **Acceptance Criteria**: The CONTRIBUTING.md references a passing CI
+badge format that matches the current repository. **Complexity**: Trivial
 
 ---
 
 ## Medium
 
 ### [ISSUE] secp256r1 / WebAuthn signer implementation
-**Context**: The library currently only supports ed25519 signers. A secp256r1 (WebAuthn/passkey) signer is needed for full passkey wallet support. This is tracked in the project roadmap.
-**Acceptance Criteria**:
+
+**Context**: The library currently only supports ed25519 signers. A secp256r1
+(WebAuthn/passkey) signer is needed for full passkey wallet support. This is
+tracked in the project roadmap. **Acceptance Criteria**:
+
 - `NewPasskeySigner` struct implementing `soroauth.Signer`
-- `SignSecp256r1` function producing `{public_key, signature}` ScVal in sorted symbol order
+- `SignSecp256r1` function producing `{public_key, signature}` ScVal in sorted
+  symbol order
 - `Secp256r1SignatureScVal` helper building the ScVal
 - Go doc examples for all three
-- At least one golden vector from a passkey wallet library (e.g., smart-account-kit)
-- `TestPasskeysGuideSnippetsMatchTheirSource` passes
-**Complexity**: High
-**Dependencies**: `passkey_golden_test.go`, `docs/passkeys.md`, vector generation with `@stellar/stellar-sdk@17.1.0`
+- At least one golden vector from a passkey wallet library (e.g.,
+  smart-account-kit)
+- `TestPasskeysGuideSnippetsMatchTheirSource` passes **Complexity**: High
+  **Dependencies**: `passkey_golden_test.go`, `docs/passkeys.md`, vector
+  generation with `@stellar/stellar-sdk@17.1.0`
 
 ### [ISSUE] Remote signer example (HTTP)
-**Context**: The `remote` package defines an HTTP signing protocol, but a full reference client example is needed.
-**Acceptance Criteria**:
+
+**Context**: The `remote` package defines an HTTP signing protocol, but a full
+reference client example is needed. **Acceptance Criteria**:
+
 - HTTP client that sends preimage + payload to a remote signer
 - Server that recomputes SHA-256 of the preimage and refuses mismatched payloads
 - Client attaches context to the request so cancellation aborts in-flight call
-- CLI `--secret-env` flag never accepts a secret value (secrets out of shell history)
-- `TestRemoteSignerExample` or equivalent compiles and passes
-**Complexity**: Medium
-**Dependencies**: `docs/verification-service.md` reference, `remote` package already exists
+- CLI `--secret-env` flag never accepts a secret value (secrets out of shell
+  history)
+- `TestRemoteSignerExample` or equivalent compiles and passes **Complexity**:
+  Medium **Dependencies**: `docs/verification-service.md` reference, `remote`
+  package already exists
 
 ### [ISSUE] Fuzz tests for ValidateDelegateOrder and Inspect
-**Context**: Property-based fuzzing would improve confidence in delegate ordering and inspection logic.
-**Acceptance Criteria**:
-- `FuzzValidateDelegateOrder` fuzz target that generates delegate trees and validates invariants
-- `FuzzInspect` fuzz target that generates authorization entries and checks Inspect output consistency
+
+**Context**: Property-based fuzzing would improve confidence in delegate
+ordering and inspection logic. **Acceptance Criteria**:
+
+- `FuzzValidateDelegateOrder` fuzz target that generates delegate trees and
+  validates invariants
+- `FuzzInspect` fuzz target that generates authorization entries and checks
+  Inspect output consistency
 - Both fuzz targets run in CI under `go test -fuzz`
-- No panics from fuzz targets across multiple runs
-**Complexity**: Medium
-**Dependencies**: `go test -fuzz` infrastructure, existing test patterns
+- No panics from fuzz targets across multiple runs **Complexity**: Medium
+  **Dependencies**: `go test -fuzz` infrastructure, existing test patterns
 
 ### [ISSUE] Python stellar-sdk cross-check for vectors
-**Context**: The golden vectors are generated by `@stellar/stellar-sdk@17.1.0` but a Python cross-check would provide independent verification.
-**Acceptance Criteria**:
-- Python script using `stellar-sdk` that reproduces the preimage and payload hash for at least 5 golden vectors
+
+**Context**: The golden vectors are generated by `@stellar/stellar-sdk@17.1.0`
+but a Python cross-check would provide independent verification. **Acceptance
+Criteria**:
+
+- Python script using `stellar-sdk` that reproduces the preimage and payload
+  hash for at least 5 golden vectors
 - Output compared against Go results, documenting any differences
-- Script committed to `testdata/gen/` or `scripts/`
-**Complexity**: Medium
-**Dependencies**: `stellar-sdk` Python package, access to testnet or simulation mode
+- Script committed to `testdata/gen/` or `scripts/` **Complexity**: Medium
+  **Dependencies**: `stellar-sdk` Python package, access to testnet or
+  simulation mode
 
 ### [ISSUE] inspect support for full TransactionEnvelope input
-**Context**: The `Inspect` function currently only accepts `xdr.SorobanAuthorizationEntry`, but users often want to inspect entries from a full transaction envelope.
-**Acceptance Criteria**:
-- `InspectEnvelope` function that accepts `xdr.TransactionEnvelope` and reports per-entry structure
+
+**Context**: The `Inspect` function currently only accepts
+`xdr.SorobanAuthorizationEntry`, but users often want to inspect entries from a
+full transaction envelope. **Acceptance Criteria**:
+
+- `InspectEnvelope` function that accepts `xdr.TransactionEnvelope` and reports
+  per-entry structure
 - Handles fee-bump envelopes (reads through to inner transaction)
 - Handles envelopes with `invokeHostFunction` operations
 - CLI `inspect` subcommand accepts either entry or envelope
-- Go doc examples compile and pass
-**Complexity**: Medium
-**Dependencies**: Existing `Inspect`, `InspectEnvelope` patterns in the codebase
+- Go doc examples compile and pass **Complexity**: Medium **Dependencies**:
+  Existing `Inspect`, `InspectEnvelope` patterns in the codebase
 
 ### [ISSUE] CLI --nested delegate syntax
-**Context**: The CLI's `delegates` subcommand takes a flat list; nested delegates are library-only. A `--nested` flag or syntax would improve usability.
+
+**Context**: The CLI's `delegates` subcommand takes a flat list; nested
+delegates are library-only. A `--nested` flag or syntax would improve usability.
 **Acceptance Criteria**:
+
 - CLI `--nested` flag that accepts delegate addresses with nesting depth
-- Example: `soroauth delegates --entry <b64> --valid-until <n> --delegate GABC... --nested GBDE...`
+- Example:
+  `soroauth delegates --entry <b64> --valid-until <n> --delegate GABC... --nested GBDE...`
 - Backward compatible with flat-delegate syntax
-- Go doc examples compile and pass
-**Complexity**: Medium
-**Dependencies**: Existing `sign_delegates.go` recipe, CLI command structure
+- Go doc examples compile and pass **Complexity**: Medium **Dependencies**:
+  Existing `sign_delegates.go` recipe, CLI command structure
 
 ### [ISSUE] CAP-85 note in docs
-**Context**: CAP-85 would add new capabilities to Soroban authorization. Document any known departures or planned support.
-**Acceptance Criteria**:
+
+**Context**: CAP-85 would add new capabilities to Soroban authorization.
+Document any known departures or planned support. **Acceptance Criteria**:
+
 - `docs/CAP-85.md` or equivalent doc section stating the library's position
-- If CAP-85 is not yet standardized, a note explaining the status and tracking issue
-- No broken links or references
-**Complexity**: Trivial
-**Dependencies**: CAP-85 proposal status (as of 2026)
+- If CAP-85 is not yet standardized, a note explaining the status and tracking
+  issue
+- No broken links or references **Complexity**: Trivial **Dependencies**: CAP-85
+  proposal status (as of 2026)
 
 ### [ISSUE] Benchmarks for signing path
+
 **Context**: The library has benchmarks but they may need expansion or update.
 **Acceptance Criteria**:
+
 - Benchmarks for `Preimage`, `Payload`, `AuthorizeEntry` on all credential arms
 - `AuthorizeAll` over a realistic batch (12 entries)
 - `AuthorizeInvocation`
 - CI gates allocs/op and B/op against `testdata/bench/budgets.json`
-- `scripts/checkbench` reports measured values
-**Complexity**: Medium
-**Dependencies**: Existing `scripts/checkbench`, `testdata/bench/budgets.json`
+- `scripts/checkbench` reports measured values **Complexity**: Medium
+  **Dependencies**: Existing `scripts/checkbench`, `testdata/bench/budgets.json`
 
 ### [ISSUE] Go doc examples for every exported function
-**Context** (duplicate entry for emphasis): Some exported functions lack Go doc examples covering their full API.
-**Acceptance Criteria**: Every exported function has a Go doc example that compiles with `go doc -example`. `go test` runs the examples.
-**Complexity**: Trivial
+
+**Context** (duplicate entry for emphasis): Some exported functions lack Go doc
+examples covering their full API. **Acceptance Criteria**: Every exported
+function has a Go doc example that compiles with `go doc -example`. `go test`
+runs the examples. **Complexity**: Trivial
 
 ### [ISSUE] AuthorizeAll delegate-plan input
-**Context**: `AuthorizeAll` now supports `AuthorizeAllOption`s including `WithDelegatePlans`, but the input format and usage could be clearer.
+
+**Context**: `AuthorizeAll` now supports `AuthorizeAllOption`s including
+`WithDelegatePlans`, but the input format and usage could be clearer.
 **Acceptance Criteria**:
+
 - `WithDelegatePlans` maps an address to a `DelegatePlan` (delegates tree)
 - Using `WithDelegatePlans` in `AuthorizeAll` signs entries with delegate trees
-- An address matching no entry returns `ErrDelegatePlanUnmatched`, never a silent no-op
-- Go doc examples compile and pass for all `AuthorizeAllOption`s
-**Complexity**: Medium
-**Dependencies**: Existing `AuthorizeAll`, `WithDelegatePlans`, `DelegatePlan` patterns
+- An address matching no entry returns `ErrDelegatePlanUnmatched`, never a
+  silent no-op
+- Go doc examples compile and pass for all `AuthorizeAllOption`s **Complexity**:
+  Medium **Dependencies**: Existing `AuthorizeAll`, `WithDelegatePlans`,
+  `DelegatePlan` patterns
 
 ---
 
 ## High
 
 ### [ISSUE] Passkey signer with golden vectors from passkey wallet library
-**Context** (see Medium entry above, but elevated to High for full implementation):
-**Acceptance Criteria** (expanded):
+
+**Context** (see Medium entry above, but elevated to High for full
+implementation): **Acceptance Criteria** (expanded):
+
 - Full `PasskeySigner` implementation
 - Golden vectors from `smart-account-kit@0.8.0` or equivalent
 - `testdata/gen/gen-passkey.mjs` generates passkey vectors
 - `TestPasskeysGuideSnippetsMatchTheirSource` passes
 - `docs/passkeys.md` is an end-to-end guide
-- All passkey e2e scenarios (J-K) pass on testnet
-**Complexity**: Very High
-**Dependencies**: passkey wallet library, testnet access, `smart-account-kit`
+- All passkey e2e scenarios (J-K) pass on testnet **Complexity**: Very High
+  **Dependencies**: passkey wallet library, testnet access, `smart-account-kit`
 
 ### [ISSUE] Differential fuzzing across implementations
-**Context**: The library has differential fuzzing infrastructure (`cmd/difffuzz`), but more targets would improve coverage.
-**Acceptance Criteria**:
+
+**Context**: The library has differential fuzzing infrastructure
+(`cmd/difffuzz`), but more targets would improve coverage. **Acceptance
+Criteria**:
+
 - Additional fuzz targets for `Preimage`, `Payload`, `DecodeAuthorizationEntry`
 - CI runs differential suite nightly
 - Regression seeds committed to `testdata/differential/regressions/`
-- `make differential` runs the full suite
-**Complexity**: Medium
-**Dependencies**: `cmd/difffuzz` infrastructure, Python `stellar-sdk`, `@stellar/stellar-sdk`
+- `make differential` runs the full suite **Complexity**: Medium
+  **Dependencies**: `cmd/difffuzz` infrastructure, Python `stellar-sdk`,
+  `@stellar/stellar-sdk`
 
 ### [ISSUE] e2e scenarios F-I: session keys and M-of-N
-**Context**: E2E scenarios for session-key and M-of-N delegation fixtures against live testnet.
-**Acceptance Criteria**:
+
+**Context**: E2E scenarios for session-key and M-of-N delegation fixtures
+against live testnet. **Acceptance Criteria**:
+
 - Session-key contract with ledger-window validity
 - M-of-N contract requiring exact M signatures
 - Scenarios F: in-window session key accepted
 - Scenario G: expired session key rejects with contract error
 - Scenario H: M-of-N accepts exactly M signed delegates
 - Scenario I: M-of-N rejects with M-1 signatures
-- All transaction hashes logged in `e2e/RESULTS.md`
-**Complexity**: Medium
-**Dependencies**: New contract fixtures under `e2e/contracts/`, testnet access
+- All transaction hashes logged in `e2e/RESULTS.md` **Complexity**: Medium
+  **Dependencies**: New contract fixtures under `e2e/contracts/`, testnet access
 
 ### [ISSUE] Capability documentation and protocol version matrix
-**Context**: The library tracks protocol version support per credential arm, but formal documentation is needed.
-**Acceptance Criteria**:
+
+**Context**: The library tracks protocol version support per credential arm, but
+formal documentation is needed. **Acceptance Criteria**:
+
 - `ArmProtocolVersion` documented per CAP introduction version
 - README "Protocol version support" table
 - `TestArmProtocolVersionMatchesTheReadme` passes
-- All three address arms mapped to correct protocol versions
-**Complexity**: Trivial
-**Dependencies**: Existing `ArmProtocolVersion` constants, README table
+- All three address arms mapped to correct protocol versions **Complexity**:
+  Trivial **Dependencies**: Existing `ArmProtocolVersion` constants, README
+  table
 
 ---
 
 ## Low
 
 ### [ISSUE] Remove deprecated code or flags
+
 **Context**: Any deprecated flags or code paths that can be cleaned up.
-**Acceptance Criteria**: No `// deprecated` comments in exported code; unused flags removed.
-**Complexity**: Trivial
+**Acceptance Criteria**: No `// deprecated` comments in exported code; unused
+flags removed. **Complexity**: Trivial
 
 ### [ISSUE] Improve error messages for CLI users
-**Context**: CLI error messages could be more user-friendly.
-**Acceptance Criteria**: Error messages for `--secret-env` not set, invalid base64, etc. are clear and actionable.
-**Complexity**: Trivial
+
+**Context**: CLI error messages could be more user-friendly. **Acceptance
+Criteria**: Error messages for `--secret-env` not set, invalid base64, etc. are
+clear and actionable. **Complexity**: Trivial
 
 ---
 
-*Maintainer note: Issues are prioritized by complexity and dependencies. Trivial issues can be completed in a single PR; Medium issues require more investigation; High issues may span multiple PRs and may depend on external factors (testnet access, third-party library versions). New issues should be added to this file following the same format.*
+_Maintainer note: Issues are prioritized by complexity and dependencies. Trivial
+issues can be completed in a single PR; Medium issues require more
+investigation; High issues may span multiple PRs and may depend on external
+factors (testnet access, third-party library versions). New issues should be
+added to this file following the same format._

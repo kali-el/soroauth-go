@@ -134,17 +134,26 @@ both its source and its fenced block as described in
 
 When adding a new recipe to the README:
 
-1. Create a new Go file in `internal/readmesnippets/` with a `// snippet:start <name>` / `// snippet:end <name>` marker pair.
-2. The code between markers must be a complete, compiling program (not a fragment).
-3. Add the snippet name and source file to `readme_test.go` in the `readmeSnippets` variable.
-4. Add the ```go code block to `README.md` in the appropriate location (after the existing blocks, maintaining order).
-5. Run `go test -run TestReadmeSnippetsMatchTheirSource -v` to verify all blocks match.
+1. Create a new Go file in `internal/readmesnippets/` with a
+   `// snippet:start <name>` / `// snippet:end <name>` marker pair.
+2. The code between markers must be a complete, compiling program (not a
+   fragment).
+3. Add the snippet name and source file to `readme_test.go` in the
+   `readmeSnippets` variable.
+4. Add the ```go code block to `README.md` in the appropriate location (after
+   the existing blocks, maintaining order).
+5. Run `go test -run TestReadmeSnippetsMatchTheirSource -v` to verify all blocks
+   match.
 
-**Golden vector rule**: Never edit a vector by hand. If a golden vector needs updating, regenerate it with `make vectors` and commit the new JSON. The CI drift check (`make vectors-check`) will fail if the Go code produces different output.
+**Golden vector rule**: Never edit a vector by hand. If a golden vector needs
+updating, regenerate it with `make vectors` and commit the new JSON. The CI
+drift check (`make vectors-check`) will fail if the Go code produces different
+output.
 
 ## Regenerating Golden Vectors
 
-Vectors are generated in `testdata/vectors/` by `gen.mjs` using `@stellar/stellar-sdk@17.1.0`.
+Vectors are generated in `testdata/vectors/` by `gen.mjs` using
+`@stellar/stellar-sdk@17.1.0`.
 
 ```bash
 # Install dependencies
@@ -155,9 +164,11 @@ the measured value, and the committed baseline, with the benchmark path on the
 following line:
 
 ```
-FAIL verification/delegates        allocs/op 49 > baseline 10
-                                   benchmark BenchmarkVerifyEntry/delegates  (143581 ns/op)
-```
+
+FAIL verification/delegates allocs/op 49 > baseline 10 benchmark
+BenchmarkVerifyEntry/delegates (143581 ns/op)
+
+````
 
 The two commands above, run from the repository root, reproduce it locally —
 `checkbench` exits 1 exactly as CI does. Once you can see _which_ operation and
@@ -167,7 +178,7 @@ arm regressed, find out _where_ the allocations come from:
 go test -run '^$' -bench BenchmarkXDRCopy -benchmem -count=1 -memprofile /tmp/mem.out .
 go tool pprof -alloc_objects -top /tmp/mem.out   # rank by number of allocations
 go tool pprof -alloc_space  -top /tmp/mem.out    # rank by bytes
-```
+````
 
 The signing-path entries (`AuthorizeEntry`, `AuthorizeAll`) also include ed25519
 signing and SHA-256; `BenchmarkXDRCopy` isolates the deep copy, so a regression
@@ -363,7 +374,9 @@ node gen.mjs
 make vectors-check
 ```
 
-**Important**: The generator refuses to run if the loaded SDK version is not exactly `17.1.0`. The `sdk` field in each generated JSON records the actual version loaded.
+**Important**: The generator refuses to run if the loaded SDK version is not
+exactly `17.1.0`. The `sdk` field in each generated JSON records the actual
+version loaded.
 
 ## Running Tests
 
@@ -386,7 +399,8 @@ go vet ./...
 E2E tests (build tag `e2e`) interact with Stellar testnet. Each scenario:
 
 1. Funds accounts via friendbot
-2. Reads the RPC URL from `SOROAUTH_RPC_URL` (default: `https://soroban-testnet.stellar.org`)
+2. Reads the RPC URL from `SOROAUTH_RPC_URL` (default:
+   `https://soroban-testnet.stellar.org`)
 3. Verifies the RPC is reachable with a live call
 4. Builds, signs, and submits a transaction
 5. Polls until the transaction is done
@@ -394,6 +408,7 @@ E2E tests (build tag `e2e`) interact with Stellar testnet. Each scenario:
 7. Appends results to `e2e/RESULTS.md`
 
 **Scenarios**:
+
 - **A**: Legacy arm signing accepted live
 - **B**: V2 arm accepted live
 - **C**: `AccountMultiSigner` accepted live
@@ -423,10 +438,12 @@ No force-pushes. Never commit secrets. Test keys are derived from public labels.
 
 1. Run `make vectors` to regenerate `testdata/vectors/*.json`
 2. Run `make vectors-check` to verify Go output matches vectors
-3. If drift is detected, investigate the Go code change and update vectors if protocol-approved
+3. If drift is detected, investigate the Go code change and update vectors if
+   protocol-approved
 4. Commit all changes (vectors, go.mod, go.sum, README.md, readme_test.go)
 
-**Never edit a golden vector by hand** - it constitutes a wire-format regression.
+**Never edit a golden vector by hand** - it constitutes a wire-format
+regression.
 
 ## License
 
@@ -439,7 +456,9 @@ carry individual license headers by design.
 
 ## Security Issues
 
-Report security issues via GitHub Security Advisories. Do not create public issues for security bugs. The scope includes signature-correctness bugs (critical), not documentation improvements or feature requests.
+Report security issues via GitHub Security Advisories. Do not create public
+issues for security bugs. The scope includes signature-correctness bugs
+(critical), not documentation improvements or feature requests.
 
 ## Questions?
 
