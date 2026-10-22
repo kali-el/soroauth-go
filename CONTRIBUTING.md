@@ -29,8 +29,7 @@ the section that explains it.
 - [ ] **7. Run `make`** — that is `fmt`, `vet` and `test`. If you touched any
       Markdown, also run `npx prettier --write '**/*.md'`, because the build
       checks it. `golangci-lint run ./...` is a local gate worth running too —
-      see [Before you open a pull request](#before-you-open-a-pull-request) and
-      [Linting](#linting).
+      see [Make targets](#make-targets) and [Running Tests](#running-tests).
 - [ ] **8. Commit in conventional form**, lowercase and imperative, one logical
       unit per commit, with the command you ran and its real output in the body
       — see [Commit format](#commit-format).
@@ -44,7 +43,8 @@ the section that explains it.
       the issue rather than absorbing it silently.
 
 One thing that is not on the list: do not report a signature-correctness or
-key-handling bug in a public issue or pull request. See [Security](#security).
+key-handling bug in a public issue or pull request. See
+[Security Issues](#security-issues).
 
 ## Picking up an issue
 
@@ -75,8 +75,8 @@ Two optional pieces need more:
   28.0.0. See [the fixture contract quickstart](docs/fixture-quickstart.md) for
   a step-by-step build and deploy guide from a clean checkout.
 - **Working on the wallet SDK adapter** (`adapters/walletsdk`) needs nothing
-  extra, but it is a module of its own with its own test loop; see
-  [The nested adapter module](#the-nested-adapter-module).
+  extra, but it is a module of its own with its own test loop; run
+  `cd adapters/walletsdk && go test ./...`.
 - **Running the Python parity harness** needs Python 3.10+ and the pinned SDK in
   `testdata/parity-python/requirements.txt`; `make parity` creates a venv and
   installs it. The differential fuzzing harness reuses the same venv and SDK:
@@ -117,7 +117,20 @@ formatting instead of printing a warning, `make vectors-check` exits non-zero
 when regeneration changes a committed vector, and `make e2e` refuses to run
 without `stellar-cli` rather than failing later with an obscure test error.
 
-## Adding Recipes (Issue #408)
+## What a change needs
+
+A change is ready for review when its behavior is covered by a test that would
+fail without the change, exported APIs explain their purpose and constraints,
+and protocol claims cite the source that supports them. Changes to authorization
+entries must preserve caller input, and errors must be returned rather than
+silently ignored.
+
+Run the relevant checks in [Running Tests](#running-tests) and include the exact
+commands and outcomes in the pull request. When editing a README example, update
+both its source and its fenced block as described in
+[Verifying README snippets compile](#verifying-readme-snippets-compile).
+
+## Adding Recipes
 
 When adding a new recipe to the README:
 
@@ -368,7 +381,7 @@ go test -tags e2e ./e2e/...
 go vet ./...
 ```
 
-## E2E Test Scenarios
+## Running the E2E tests
 
 E2E tests (build tag `e2e`) interact with Stellar testnet. Each scenario:
 
@@ -418,6 +431,11 @@ No force-pushes. Never commit secrets. Test keys are derived from public labels.
 ## License
 
 This project is Apache-2.0 licensed. See `LICENSE` for details.
+
+## No per-file license headers
+
+The repository-wide [LICENSE](LICENSE) applies to source files. They do not
+carry individual license headers by design.
 
 ## Security Issues
 

@@ -1,5 +1,9 @@
 # Security Policy
 
+## Status of this library
+
+This library is unaudited. No claim of an audit or production proof is made.
+
 ## Supported Versions
 
 Use this table to determine which versions are currently being supported with security fixes.

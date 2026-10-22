@@ -10,6 +10,9 @@ this project adheres to
 
 ### Added
 
+- Add ten README recipes with compile-checked source snippets, a contributor
+  guide, a security policy, and an issue backlog. (#408, #409, #410, #411)
+
 - Add the `explain-error` CLI subcommand and vector-discrepancy issue template
   reference. (#400, #401, #402, #403)
 

@@ -1181,13 +1181,13 @@ http.Handle(remote.Path, server)
 signer := remote.NewSigner("http://127.0.0.1:8080", signerKey.Address())
 return soroauth.AuthorizeEntry(ctx, unsigned, signer, validUntil, network.TestNetworkPassphrase)
 ``````go
-	signed, err := sorauth.AuthorizeEntry(ctx, entry, soroauth.NewEd25519Signer(signer), validUntil, passphrase)
+	signed, err := soroauth.AuthorizeEntry(ctx, entry, soroauth.NewEd25519Signer(signer), validUntil, passphrase)
 ```
 ```go
-	signed, err := sorauth.AuthorizeEntry(ctx, entry, soroauth.NewEd25519Signer(signer), validUntil, passphrase)
+	signed, err := soroauth.AuthorizeEntry(ctx, entry, soroauth.NewEd25519Signer(signer), validUntil, passphrase)
 ```
 ```go
-	wrapped, err := sorauth.WithDelegates(entry, validUntil,
+	wrapped, err := soroauth.WithDelegates(entry, validUntil,
 		[]soroauth.Delegate{
 			{Address: d1},
 			{Address: d2, Nested: []soroauth.Delegate{{Address: d3}}},
@@ -1196,7 +1196,7 @@ return soroauth.AuthorizeEntry(ctx, unsigned, signer, validUntil, network.TestNe
 		return xdr.SorobanAuthorizationEntry{}, err
 	}
 	for _, kp := range []*keypair.Full{k1, k2, k3} {
-		wrapped, err = sorauth.AuthorizeEntry(ctx, wrapped,
+		wrapped, err = soroauth.AuthorizeEntry(ctx, wrapped,
 			soroauth.NewEd25519Signer(kp), validUntil, passphrase,
 			soroauth.ForAddress(kp.Address()))
 		if err != nil {
@@ -1205,34 +1205,34 @@ return soroauth.AuthorizeEntry(ctx, unsigned, signer, validUntil, network.TestNe
 	}
 ```
 ```go
-	result, err := sorauth.UpgradeToV2(entry)
+	result, err := soroauth.UpgradeToV2(entry)
 ```
 ```go
-	info, err := sorauth.Inspect(entry)
+	info, err := soroauth.Inspect(entry)
 ```
 ```go
-	preimage, err := sorauth.Preimage(entry, validUntilLedger, networkPassphrase)
+	preimage, err := soroauth.Preimage(entry, validUntilLedger, networkPassphrase)
 	if err != nil {
-		return xdr.HashIdPreimage__, [32]byte{}, err
+		return xdr.HashIdPreimage{}, [32]byte{}, err
 	}
-	payload, err := sorauth.Payload(preimage)
+	payload, err := soroauth.Payload(preimage)
 	if err != nil {
-		return xdr.HashIdPreimage__, [32]byte{}, err
+		return xdr.HashIdPreimage{}, [32]byte{}, err
 	}
 ```
 ```go
-	signed, err := sorauth.AuthorizeAll(ctx, entries,
+	signed, err := soroauth.AuthorizeAll(ctx, entries,
 		[]soroauth.Signer{soroauth.NewEd25519Signer(signer)},
 		validUntil, passphrase)
 ```
 ```go
-	err := sorauth.ValidateDelegateOrder(entry)
+	err := soroauth.ValidateDelegateOrder(entry)
 ```
 ```go
-	result, err := sorauth.ExpirationAfter(latestLedger, ledgers)
+	result, err := soroauth.ExpirationAfter(latestLedger, ledgers)
 ```
 ```go
-	result, err := sorauth.WithDelegates(entry, validUntil, delegates, nil)
+	result, err := soroauth.WithDelegates(entry, validUntil, delegates, nil)
 ```
 
 It is a reference, not a service: it has no authentication, holds no key store,
