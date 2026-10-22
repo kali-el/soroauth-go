@@ -225,7 +225,8 @@ func Inspect(entry xdr.SorobanAuthorizationEntry) (EntryInfo, error) {
 	// The root function. Only the contract-call arm names a contract and a
 	// function; the create-contract arms are reported by their absence rather
 	// than by inventing a name for them.
-	if entry.RootInvocation.Function.Type == xdr.SorobanAuthorizedFunctionTypeSorobanAuthorizedFunctionTypeContractFn {
+	switch entry.RootInvocation.Function.Type {
+	case xdr.SorobanAuthorizedFunctionTypeSorobanAuthorizedFunctionTypeContractFn:
 		contractFn := entry.RootInvocation.Function.ContractFn
 		if contractFn == nil {
 			return EntryInfo{}, fmt.Errorf("soroauth: inspect: contract_fn invocation arm is empty")
@@ -236,6 +237,16 @@ func Inspect(entry xdr.SorobanAuthorizationEntry) (EntryInfo, error) {
 		}
 		info.RootContract = contract
 		info.RootFunction = string(contractFn.FunctionName)
+
+	case xdr.SorobanAuthorizedFunctionTypeSorobanAuthorizedFunctionTypeCreateContractHostFn,
+		xdr.SorobanAuthorizedFunctionTypeSorobanAuthorizedFunctionTypeCreateContractV2HostFn:
+		// Create-contract arms: behave as they do today — do not set
+		// RootContract or RootFunction.
+		// No error: these are valid arms that the library knows about but
+		// does not name in the structural summary.
+
+	default:
+		return EntryInfo{}, fmt.Errorf("soroauth: inspect: %w", ErrUnsupportedFunctionType)
 	}
 
 	subInvocations, err := countSubInvocations(entry.RootInvocation.SubInvocations, 1)

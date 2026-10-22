@@ -104,6 +104,12 @@ func TestEveryExportedEntryFunctionPreservesInput(t *testing.T) {
 		"WithDelegates": func(entry xdr.SorobanAuthorizationEntry) {
 			_, _ = WithDelegates(entry, validUntil, nil, nil)
 		},
+		"Clone": func(entry xdr.SorobanAuthorizationEntry) {
+			_, _ = Clone(entry)
+		},
+		"Equal": func(entry xdr.SorobanAuthorizationEntry) {
+			_ = Equal(entry, entry)
+		},
 	}
 
 	discovered := make(map[string]bool, len(functions))

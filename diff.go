@@ -358,14 +358,19 @@ func presence(present bool) string {
 }
 
 // functionTypeName names an authorized function type for a diff line.
+//
+// Returns ErrUnsupportedFunctionType for function types not handled by this
+// library, so callers can detect unrecognized types with errors.Is.
 func functionTypeName(t xdr.SorobanAuthorizedFunctionType) string {
 	switch t {
 	case xdr.SorobanAuthorizedFunctionTypeSorobanAuthorizedFunctionTypeContractFn:
 		return "contract_fn"
 	case xdr.SorobanAuthorizedFunctionTypeSorobanAuthorizedFunctionTypeCreateContractHostFn:
 		return "create_contract_host_fn"
+	case xdr.SorobanAuthorizedFunctionTypeSorobanAuthorizedFunctionTypeCreateContractV2HostFn:
+		return "create_contract_v2_host_fn"
 	default:
-		return fmt.Sprintf("function type %d", int32(t))
+		return fmt.Sprintf("soroauth: %s", ErrUnsupportedFunctionType.Error())
 	}
 }
 

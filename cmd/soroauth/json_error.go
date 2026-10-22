@@ -27,6 +27,7 @@ type sentinelJSONError struct {
 var sentinelJSONErrors = []sentinelJSONError{
 	{soroauth.ErrSourceAccountCredentials, "source_account_credentials", "--entry", "credentials are source-account, which carry no signature payload"},
 	{soroauth.ErrUnsupportedCredentials, "unsupported_credentials", "--entry", "unsupported credentials type"},
+	{soroauth.ErrUnsupportedFunctionType, "unsupported_function_type", "--entry", "unsupported authorized-function type in the invocation tree"},
 	{soroauth.ErrNoMatchingCredentialNode, "no_matching_credential_node", "--entry", "no credential node matches the target address"},
 	{soroauth.ErrDuplicateDelegate, "duplicate_delegate", "--delegate", "duplicate delegate address at the same level"},
 	{soroauth.ErrSignatureMismatch, "signature_mismatch", "--entry", "signature does not verify against the payload"},

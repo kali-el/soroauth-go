@@ -137,7 +137,213 @@ Vectors are generated in `testdata/vectors/` by `gen.mjs` using `@stellar/stella
 # Install dependencies
 cd testdata/gen && npm ci
 
-# Generate all vectors
+A CI failure from the `bench` job is a `FAIL` line naming the operation and arm,
+the measured value, and the committed baseline, with the benchmark path on the
+following line:
+
+```
+FAIL verification/delegates        allocs/op 49 > baseline 10
+                                   benchmark BenchmarkVerifyEntry/delegates  (143581 ns/op)
+```
+
+The two commands above, run from the repository root, reproduce it locally —
+`checkbench` exits 1 exactly as CI does. Once you can see _which_ operation and
+arm regressed, find out _where_ the allocations come from:
+
+```sh
+go test -run '^$' -bench BenchmarkXDRCopy -benchmem -count=1 -memprofile /tmp/mem.out .
+go tool pprof -alloc_objects -top /tmp/mem.out   # rank by number of allocations
+go tool pprof -alloc_space  -top /tmp/mem.out    # rank by bytes
+```
+
+The signing-path entries (`AuthorizeEntry`, `AuthorizeAll`) also include ed25519
+signing and SHA-256; `BenchmarkXDRCopy` isolates the deep copy, so a regression
+that moves both almost always starts in `internal/xdrcopy`.
+
+The `BenchmarkXDRCopy` budgets are deliberately tighter than the ~40% policy:
+they sit **below** what a copy cost before the round-trip buffers were pooled
+(issue #108), so reverting that pooling fails this gate instead of only a local
+run. If they fail after a change that never touched `internal/xdrcopy`, profile
+with the commands above before moving the number, and if the new cost is
+justified, raise it in the same commit with the measurement in the body.
+
+## Verifying README snippets compile
+
+The README's Go examples (Quickstart, Delegates, and the inline `AllowResign`
+snippet) are not free-standing markdown text: each is extracted verbatim from a
+real, compiling source file in `internal/readmesnippets/`, between a
+`// snippet:start <name>` and `// snippet:end <name>` comment pair.
+`TestReadmeSnippetsMatchTheirSource` in `readme_test.go` at the repository root
+asserts the fenced code block in README.md is byte-identical (modulo
+tabs-vs-spaces) to that marked region. The guides under `docs/` — `passkeys.md`,
+`migrating.md` — are checked the same way by
+`TestGuideSnippetsMatchTheirSource`.
+
+This means two different things can fail, and the test names which:
+
+- **The snippet source stops compiling.** It is an ordinary package with no
+  build tag, so `go build ./...` and `go vet ./...` — which CI already runs on
+  every push — catch this like any other compile error, naming the file and
+  line.
+- **The README drifts from its source**, for example a hand-edit to the fenced
+  block without updating `internal/readmesnippets/`, or the reverse.
+  `TestReadmeSnippetsMatchTheirSource` fails and prints both texts.
+
+To reproduce either failure locally:
+
+```sh
+go build ./...                        # catches a snippet that no longer compiles
+go test -run TestReadmeSnippets -v .  # catches README/source drift, naming the snippet
+```
+
+To change an example, edit the marked region in `internal/readmesnippets/*.go`
+and copy it verbatim (as, or converted from, tabs) into the matching fenced
+block in README.md. Never edit the fenced block alone: it is not the source of
+truth, and the drift test will fail on the next run.
+
+## Protocol version matrix
+
+`ArmProtocolVersion` (`protocolmatrix.go`) and the README's "Protocol version
+support" table both claim the same thing — which Stellar protocol version each
+credential arm requires — sourced from each arm's CAP preamble (CAP-46-11 for
+the source-account and legacy arms, CAP-71-01 and CAP-71-02 for V2 and the
+delegates arm). `TestArmProtocolVersionMatchesTheReadme` in
+`protocolmatrix_test.go` parses the README table and fails if its numbers
+disagree with `ArmProtocolVersion`, and `TestArmProtocolVersionMatchesTheCAPs`
+pins `ArmProtocolVersion` itself to the values read directly from the CAPs.
+
+To reproduce a failure locally:
+
+```sh
+go test -run TestArmProtocolVersion -v .
+```
+
+Changing a protocol version claim means updating both `protocolmatrix.go` and
+the README table together, in the same commit, and citing the CAP text that
+justifies the change — never editing one side to make the test pass.
+
+## GitHub Actions are pinned to commit SHAs
+
+Every `uses:` in `.github/workflows/*.yml` names a full commit SHA with the
+version in a trailing comment, e.g. `actions/checkout@3d3c42e… # v7`, never a
+mutable tag like `@v7`. A major-version tag can be retagged to point at a
+different commit; pinning to the SHA means a compromised or retagged action
+cannot silently start running with this repository's CI permissions.
+
+Dependabot (`.github/dependabot.yml`) watches the `github-actions` ecosystem and
+opens a PR updating both the SHA and its version comment together when a new
+release comes out, so the two can never drift apart. To pin a new action by
+hand, resolve the tag to a commit first:
+
+```sh
+git ls-remote --tags https://github.com/<owner>/<repo> | grep 'refs/tags/v7$'
+```
+
+Use the first column's SHA (for an _annotated_ tag, `git ls-remote` also prints
+a `refs/tags/v7^{}` line — use that dereferenced commit SHA, not the tag
+object's own SHA).
+
+## Editing a workflow
+
+Two things about `.github/workflows/*.yml` that are easy to get wrong, because
+neither produces an error.
+
+**A `paths:` filter produces no check at all**, not a skipped one. A workflow
+that does not match is simply absent from the pull request, so a failure in it
+is invisible during review and is inherited by `main` on merge. That is how
+`spellcheck` stayed red across three merges: #286 added a word to this file, the
+workflow is `paths:`-filtered, and there was no row to look at. An `if:`-gated
+_job_ still reports a row; a `paths:`-filtered _workflow_ does not.
+
+So when you check whether a branch is green, list runs per workflow rather than
+reading the pull request's checks:
+
+```sh
+for f in .github/workflows/*.yml; do
+  gh run list --branch main --workflow "$(basename "$f")" --limit 1 \
+    --json conclusion,headSha,displayTitle
+done
+```
+
+**Every filtered workflow trigger must include its workflow's own path.** The
+root Go test
+[`TestPathFilteredWorkflowsIncludeTheirOwnPath`](workflow_paths_test.go) parses
+each workflow and fails when any `paths:` list omits its own path. Without that
+line a change to a workflow cannot validate itself: #294 changed only
+`ci-adapters.yml`, matched nothing in that workflow's own filter, and landed on
+`main` with its new job never having run once. If you add a workflow with a
+`paths:` filter, include its own path in every filtered event.
+
+### Release attestations and signatures
+
+Every release artifact is attested and signed, and the way to check that is a
+script rather than prose, so it can run in CI:
+
+- `scripts/verify-release.sh` verifies a downloaded release: every binary
+  against its `.sigstore.json` bundle (cosign, keyless) and its build provenance
+  attestation (`gh attestation verify`), every attached `.spdx.json` SBOM
+  against its SBOM attestation, and the container image digest the release
+  names. `--tamper-demo` flips one byte in a verified binary and requires
+  **both** paths to reject the copy, because a check nobody has seen reject
+  something is not evidence.
+- The `verify-release` job in `.github/workflows/release.yml` runs the script
+  against the release it just published, so a release whose assets do not verify
+  stays red instead of being announced.
+- `.github/workflows/verify-release.yml` re-runs it weekly against the newest
+  release that carries bundles (releases from before the scheme are skipped with
+  a message, not failed). Its `self_test` dispatch input builds a throwaway
+  binary from any ref and runs the same script plus the tamper demo on the run's
+  own OIDC identity — that is the evidence to attach to a pull request that
+  touches this scheme:
+
+  ```sh
+  gh workflow run verify-release.yml --repo <owner>/soroauth-go \
+    --ref <branch> -f self_test=true
+  ```
+
+Signing is keyless: the certificate comes from the workflow's GitHub OIDC
+identity, so no key exists in CI to leak or rotate. The flip side is that an
+action added to a job that can mint an OIDC token in these workflows runs with
+that identity and writes attestations under it, which is one more reason every
+new action must be SHA-pinned as described above — and why the verification
+commands in the README and in `scripts/verify-release.sh` pin the _identity_
+(this repository's workflow at a tag), not a key.
+
+## Golden vectors
+
+`testdata/vectors/*.json` are generated, committed artefacts. They are the
+evidence that soroauth agrees byte-for-byte with the reference implementation.
+
+**Never edit a vector by hand.** Not to fix a failing test, not to adjust a
+field, not for anything. A hand-edited vector is a test that has been made to
+agree with the code instead of the other way round, which is precisely the
+failure the vectors exist to prevent. CI regenerates them on every push and
+fails if the committed files differ, so an edit will be caught — but the reason
+not to do it is that it destroys the evidence, not that you will be caught.
+
+There are two generators, because there are two things being proven:
+
+- `gen.mjs` writes `testdata/vectors/*.json`, the authorization-entry vectors,
+  against a pinned `@stellar/stellar-sdk`.
+- `gen-passkey.mjs` writes `testdata/vectors/passkey/*.json`, the passkey
+  signature-shape vectors, against a pinned `smart-account-kit`. The passkey
+  shape is not protocol-defined — a custom account's `__check_auth` decides it —
+  so there is no CAP to cite and the evidence is a real wallet library's output
+  instead.
+
+If you discover a vector discrepancy (e.g. the Go output does not match the JS
+SDK), **do not edit the vector by hand**. Instead, open a new issue using the
+"Vector discrepancy report" template at
+`.github/ISSUE_TEMPLATE/vector-discrepancy.md`. This template collects both
+encodings, both implementation versions, the vector name, and the command that
+produced the disagreement. Prominently states that no vector may be edited by
+hand. Route to maintainers at the appropriate severity.
+
+To change them, change the generator:
+
+```sh
+cd testdata/gen
+npm ci
 node gen.mjs
 
 # Run the drift check (compares Go output against vectors)

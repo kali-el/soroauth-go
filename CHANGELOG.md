@@ -8,7 +8,29 @@ this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- Add the `explain-error` CLI subcommand and vector-discrepancy issue template
+  reference. (#400, #401, #402, #403)
+
 ### Changed
+
+- **C shared-library ABI** (`bindings/c`) builds the signing core as a
+  `c-shared` library and exposes the authorization operations and typed errors
+  through a JSON-based C interface. (#339)
+
+- `Equal` and `Clone` are available from the Go package: `Equal` compares
+  authorization entries by their encoded XDR bytes, and `Clone` returns a deep
+  copy that can be mutated without changing the original entry. (#385)
+
+- `Inspect` returns `ErrUnsupportedFunctionType` for invocation function types
+  it does not support, so callers can distinguish unsupported input from a
+  successful inspection. (#387)
+
+- Decode limits are exposed through `MaxDecodeDepth`, `MaxDecodeInputBytes` and
+  `LimitOptions`. Callers may tighten the bounds used when decoding
+  authorization entries and transaction envelopes, but cannot loosen the
+  defaults. (#388)
 
 - **The minimum Go version is now 1.26.3** (was 1.25.0). `go.mod`, every
   `adapters/*/go.mod`, the README and CONTRIBUTING name the same version, and
