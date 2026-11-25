@@ -10,6 +10,29 @@ this project adheres to
 
 ### Added
 
+- `HostRules` enumerates every rule the Soroban host enforces on an
+  authorization entry, each with its `rs-soroban-env` source citation, and marks
+  the rules that cannot be checked offline with the reason instead of omitting
+  them. `ValidateEntry` checks every offline rule in one place — delegate order
+  and uniqueness, delegate depth, value depth, map key order in the host's value
+  order (not XDR byte order), value and symbol form, address types, the classic
+  multisig vector, and create-contract authorization — and reports a violation
+  as a `*HostRuleError` that matches the new `ErrHostRuleViolation`.
+  `AuthorizeEntry` and `StreamingSign` run it before any signer is called and
+  again on the signed result. [docs/host-rules.md](docs/host-rules.md) is the
+  documented copy, and a test fails if it and the code disagree. (#623)
+- The delegate tree depth limit is established from the host source and
+  enforced: the host reads a delegate at depth k only when k + 1 +
+  depth(signature) <= 100 (98 levels with Void signatures, 96 with ed25519), and
+  soroauth applies one policy, `MaxDelegateDepth = 54`, the deepest fully signed
+  tree its own bounded decoder can read back. `WithDelegates`, `ValidateEntry`,
+  `AuthorizeEntry` and `StreamingSign` refuse a deeper tree with the new
+  `ErrDelegateDepthLimit` before signing. The host has no breadth limit; the
+  per-delegate resource cost is measured and documented instead.
+  `testdata/host-probe` (`make host-probe`) measures every boundary against the
+  real soroban-env-host 30.0.1, and e2e scenarios S, S-host and S-over confirm
+  them on testnet. (#622)
+
 - Add five AST-based repository invariant linters (`NoPanic`, `NoLogging`,
   `NoMathRand`, `NoFloats`, `NoMutation`) in `internal/invariants`, each with
   violating and compliant test fixtures and an exemption directive
