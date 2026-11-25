@@ -101,6 +101,9 @@ func TestEveryExportedEntryFunctionPreservesInput(t *testing.T) {
 		"VerifyAll": func(entry xdr.SorobanAuthorizationEntry) {
 			_, _ = VerifyAll(context.Background(), []xdr.SorobanAuthorizationEntry{entry}, "Test SDF Network ; September 2015")
 		},
+		"ValidateEntry": func(entry xdr.SorobanAuthorizationEntry) {
+			_ = ValidateEntry(entry)
+		},
 		"WithDelegates": func(entry xdr.SorobanAuthorizationEntry) {
 			_, _ = WithDelegates(entry, validUntil, nil, nil)
 		},
