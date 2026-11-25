@@ -137,6 +137,23 @@ func TestEveryExportedEntryFunctionPreservesInput(t *testing.T) {
 		"ShapeRegistry.VerifyEntryContext": func(entry xdr.SorobanAuthorizationEntry) {
 			_, _ = DefaultShapeRegistry().VerifyEntryContext(context.Background(), entry, "Test SDF Network ; September 2015")
 		},
+		"contractAllowlistConfigRule.Evaluate": func(entry xdr.SorobanAuthorizationEntry) {
+			addr, _ := FormatAddress(entry.RootInvocation.Function.ContractFn.ContractAddress)
+			r := &contractAllowlistConfigRule{name: "test", code: "TEST", severity: SeverityWarning, allowed: map[string]bool{addr: true}}
+			_, _ = r.Evaluate(entry)
+		},
+		"functionAllowlistConfigRule.Evaluate": func(entry xdr.SorobanAuthorizationEntry) {
+			r := &functionAllowlistConfigRule{name: "test", code: "TEST", severity: SeverityWarning, allowed: map[string]bool{"*": true}}
+			_, _ = r.Evaluate(entry)
+		},
+		"maxAmountConfigRule.Evaluate": func(entry xdr.SorobanAuthorizationEntry) {
+			r := &maxAmountConfigRule{name: "test", code: "TEST", severity: SeverityWarning, maxAmount: 1000000}
+			_, _ = r.Evaluate(entry)
+		},
+		"forbiddenSACAdminConfigRule.Evaluate": func(entry xdr.SorobanAuthorizationEntry) {
+			r := &forbiddenSACAdminConfigRule{name: "test", code: "TEST", severity: SeverityWarning, forbidden: map[string]bool{"set_admin": true}}
+			_, _ = r.Evaluate(entry)
+		},
 	}
 
 	discovered := make(map[string]bool, len(functions))

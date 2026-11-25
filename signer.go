@@ -6,11 +6,11 @@ import (
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/sha256"
 	"errors"
 	"fmt"
 	"math/big"
-	"math/rand"
 	"sort"
 	"strings"
 	"time"
@@ -701,10 +701,13 @@ func (s *retriedSigner) Sign(ctx context.Context, preimage xdr.HashIdPreimage, p
 			return xdr.ScVal{}, fmt.Errorf("soroauth: retry sign cancelled: %w", err)
 		}
 
-		rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 		var jitter time.Duration
-		if backoffDur/4 > 0 {
-			jitter = time.Duration(rng.Int63n(int64(backoffDur / 4)))
+		if maxJitter := int64(backoffDur / 4); maxJitter > 0 {
+			n, randErr := rand.Int(rand.Reader, big.NewInt(maxJitter))
+			if randErr != nil {
+				return xdr.ScVal{}, fmt.Errorf("soroauth: retry sign jitter: %w", randErr)
+			}
+			jitter = time.Duration(n.Int64())
 		}
 		sleepDur := backoffDur + jitter
 		if sleepDur > maxBackoff {
